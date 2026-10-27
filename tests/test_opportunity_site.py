@@ -317,6 +317,13 @@ def test_the_checkout_is_pulled_at_most_once_a_minute(repo, tmp_path):
     assert c.now().sha == second
 
 
+def test_the_first_request_clones_even_soon_after_boot(repo, tmp_path, monkeypatch):
+    # time.monotonic() counts from boot: on a fresh CI machine it can be under a minute.
+    monkeypatch.setattr(content.time, "monotonic", lambda: 5.0)
+    c = content.Content(tmp_path / "clone", url=str(repo))
+    assert c.now().sha == git(repo, "rev-parse", "HEAD")
+
+
 def test_a_broken_card_is_reported_not_fatal(repo):
     (repo / "opportunities" / "OPP-98.md").write_text("no front matter\n")
     snap = content.Content(repo, pull=False).now()

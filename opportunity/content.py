@@ -167,7 +167,7 @@ class Content:
         self.git = Git(root, token)
         self.url, self.pull, self.every = url, pull, every
         self._lock = threading.Lock()
-        self._pulled = 0.0
+        self._pulled: float | None = None  # when it last pulled; None: not yet
         self._shown: Snapshot | None = None
         self._versions: dict[tuple[str, str, str], bool] = {}
 
@@ -177,7 +177,8 @@ class Content:
 
     def now(self) -> Snapshot:
         with self._lock:
-            if self.pull and time.monotonic() - self._pulled >= self.every:
+            # monotonic() counts from boot, so "never" is None, not 0.
+            if self.pull and (self._pulled is None or time.monotonic() - self._pulled >= self.every):
                 self._pulled = time.monotonic()
                 self._refresh()
             sha = self.git.head()
