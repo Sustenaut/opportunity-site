@@ -1,9 +1,12 @@
 """Who is reading, set by OPPORTUNITY_LOGIN:
 
 - ``proxy`` (the default, for now): the site sits behind oauth2-proxy, which
-  signs people in with Google and passes the email on in X-Auth-Request-Email
-  (or X-Forwarded-Email). The site trusts that header, so it must not be
-  reachable except through the proxy; it checks the email against TEAM, the
+  signs people in with Google and passes the email on in X-Forwarded-Email,
+  replacing any such header the browser sent. The site trusts that one header
+  (OPPORTUNITY_EMAIL_HEADER names another), so it must not be reachable except
+  through the proxy. Other headers, such as X-Auth-Request-Email, the proxy
+  passes through as the browser sent them, so they are never read. It checks
+  the email against TEAM, the
   same comma-separated list review and plan get from Terraform's var.team
   (infra/variables.tf). There is no separate allowlist.
 - ``wallet`` (later): the shared sign-in at auth.sustenaut.eu as the OpenID
@@ -20,7 +23,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
 
-EMAIL_HEADERS = ("x-auth-request-email", "x-forwarded-email")
+EMAIL_HEADER = "x-forwarded-email"
 
 
 def on_cluster() -> bool:
@@ -65,7 +68,8 @@ def person(request: Request) -> Person:
     if dev and not on_cluster():
         return Person(dev.strip().lower(), "dev")
     login_mode()
-    email = next((request.headers[h] for h in EMAIL_HEADERS if request.headers.get(h)), "").strip().lower()
+    header = os.environ.get("OPPORTUNITY_EMAIL_HEADER", EMAIL_HEADER)
+    email = request.headers.get(header, "").strip().lower()
     if not email:
         raise HTTPException(401, "Sign in through https://opportunity.sustenaut.eu")
     if email not in team():

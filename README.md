@@ -53,7 +53,7 @@ anchor chosen. A form post must come from the site's own pages (its
 
 | Variable | What |
 |---|---|
-| `OPPORTUNITY_LOGIN` | `proxy` (default): trust the email oauth2-proxy sets in `X-Auth-Request-Email` or `X-Forwarded-Email`. The site must only be reachable through the proxy. `wallet` (OIDC client `opportunity` at auth.sustenaut.eu, like review-site) is not built yet and fails closed. |
+| `OPPORTUNITY_LOGIN` | `proxy` (default): trust the email oauth2-proxy sets in `X-Forwarded-Email` (it replaces whatever the browser sent; `OPPORTUNITY_EMAIL_HEADER` names another header). The site must only be reachable through the proxy. `wallet` (OIDC client `opportunity` at auth.sustenaut.eu, like review-site) is not built yet and fails closed. |
 | `TEAM` | Comma-separated emails allowed in: the same Terraform `var.team` that review and plan get. |
 | `OPPORTUNITY_OWNER` | David's email: may resolve any thread. |
 | `OPPORTUNITY_DATABASE_URL` | PostgreSQL. `opportunity/migrations/*.sql` are applied in name order at start. |

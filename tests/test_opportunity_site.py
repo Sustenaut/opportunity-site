@@ -330,10 +330,12 @@ def test_the_proxy_login_takes_the_email_header_for_team_members_only(site, monk
     monkeypatch.delenv("OPPORTUNITY_DEV_USER")
     monkeypatch.setenv("TEAM", f"{ME}, {OWNER}")
     assert client.get("/").status_code == 401
-    assert client.get("/", headers={"x-auth-request-email": OTHER}).status_code == 403
+    assert client.get("/", headers={"x-forwarded-email": OTHER}).status_code == 403
     assert client.get("/", headers={"x-forwarded-email": ME.upper()}).status_code == 200
+    # oauth2-proxy passes this one through as the browser sent it: never trusted.
+    assert client.get("/", headers={"x-auth-request-email": ME}).status_code == 401
     monkeypatch.setenv("OPPORTUNITY_LOGIN", "wallet")  # not built yet: fails closed
-    assert client.get("/", headers={"x-auth-request-email": ME}).status_code == 500
+    assert client.get("/", headers={"x-forwarded-email": ME}).status_code == 500
 
 
 def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
