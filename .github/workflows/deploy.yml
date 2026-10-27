@@ -1,0 +1,84 @@
+# Build and deploy the opportunity site (opportunity.sustenaut.eu) on each merge
+# to main that touches it, or by hand. The image goes to GitHub's container
+# registry as a private package (it holds bizplan/); the cluster pulls it with
+# the ghcr-pull Secret that opportunity-site/push-secrets.sh puts in. Then the
+# manifests in opportunity-site/k8s/, rendered with that image, go to the
+# Sustenaut k3s server (infra/hetzner.tf) over SSH, where the deploy key can only
+# run sustenaut-deploy: apply in namespace opportunity and wait. SSH is reachable
+# over Sustenaut's tailnet only, so the job joins it first, as tag:ci.
+#
+# Needs the same secrets and variables as .github/workflows/auth.yml
+# (services/auth/README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
+# built and pushed, and nothing is deployed.
+name: opportunity site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "opportunity-site/**"
+      - "bizplan/**"
+      - "requirements.lock"
+      - ".github/workflows/opportunity-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: opportunity-site
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/schryer/sustenaut-opportunity
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -f opportunity-site/Dockerfile -t "${IMAGE}:${GITHUB_SHA}" .
+
+      # The image must start and hold what the app imports.
+      - name: Check the image
+        run: |
+          docker run --rm "${IMAGE}:${GITHUB_SHA}" python -c '
+          import opportunity.main, psycopg, bizplan.opportunities
+          from pathlib import Path
+          assert sorted(p.name for p in Path("opportunity/migrations").glob("*.sql"))'
+          docker run --rm --entrypoint git "${IMAGE}:${GITHUB_SHA}" --version
+
+      - name: Push the image
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${IMAGE}:${GITHUB_SHA}"
+
+      - name: Render the manifests
+        working-directory: opportunity-site/k8s
+        run: |
+          kustomize edit set image "${IMAGE}=${IMAGE}:${GITHUB_SHA}"
+          kustomize build . > "${RUNNER_TEMP}/opportunity.yaml"
+          grep -q "${IMAGE}:${GITHUB_SHA}" "${RUNNER_TEMP}/opportunity.yaml"
+
+      - name: Join Sustenaut's tailnet
+        if: vars.SUSTENAUT_SERVER != ''
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_GH_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_GH_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy to the k3s server
+        if: vars.SUSTENAUT_SERVER != ''
+        env:
+          DEPLOY_KEY: ${{ secrets.SUSTENAUT_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.SUSTENAUT_KNOWN_HOSTS }}
+          SERVER: ${{ vars.SUSTENAUT_SERVER }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes "deploy@${SERVER}" opportunity < "${RUNNER_TEMP}/opportunity.yaml"

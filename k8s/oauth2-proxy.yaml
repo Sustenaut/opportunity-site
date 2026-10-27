@@ -1,0 +1,93 @@
+# oauth2-proxy signs people in with Google (the OAuth client opportunity-google-*
+# in Bitwarden) and lets in only the emails in Terraform's var.team, the same list
+# the app checks: push-secrets.sh puts it in the Secret, so there is no second list.
+# It hands the app the account in X-Forwarded-Email, replacing whatever the browser
+# sent. Open without sign-in: /healthz, and /storage-in-use.json, which
+# storage.sustenaut.eu's nightly clean-up reads.
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+spec:
+  selector:
+    app: oauth2-proxy
+  ports:
+    - name: http
+      port: 4180
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+          args:
+            - --provider=google
+            - --http-address=0.0.0.0:4180
+            - --upstream=http://app:8080/
+            - --redirect-url=https://opportunity.sustenaut.eu/oauth2/callback
+            - --reverse-proxy=true
+            - --authenticated-emails-file=/etc/oauth2-proxy/emails
+            - --pass-user-headers=true
+            - --cookie-name=_opportunity
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --skip-provider-button=true
+            - --skip-auth-route=GET=^/healthz$
+            - --skip-auth-route=GET=^/storage-in-use\.json$
+            - --silence-ping-logging=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: google-client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: google-client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: cookie-secret
+          ports:
+            - name: http
+              containerPort: 4180
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: emails
+              mountPath: /etc/oauth2-proxy
+              readOnly: true
+      volumes:
+        - name: emails
+          secret:
+            secretName: opportunity-secrets
+            items:
+              - key: team-emails
+                path: emails
