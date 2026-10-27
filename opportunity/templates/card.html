@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ item.id }} {{ item.name }}{% endblock %}
+{% block main %}
+<p class="eyebrow">{{ item.kind }}{% if item.group %} · {{ item.group }}{% endif %} · <code>{{ item.path }}</code> · <a href="{{ here }}/edit">Propose an edit</a></p>
+<h1>{{ item.id }} {{ item.name }}</h1>
+{% include "_fields.html" %}
+{% if reports %}
+<h2>Research</h2>
+<ul class="reports">
+{% for r in reports %}<li><a href="/r/{{ quote(r.file[:-3]) }}">{{ r.title }}</a> <span class="meta">{% if r.prepared %}prepared {{ r.prepared }}{% endif %}</span><br>{{ r.summary }}</li>{% endfor %}
+</ul>
+{% endif %}
+<p><a href="/r/new?card={{ quote(item.id) }}">Add a research report for this card</a></p>
+<article class="body">{{ body }}</article>
+{% include "_discussion.html" %}
+{% endblock %}

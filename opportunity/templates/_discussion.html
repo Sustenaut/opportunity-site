@@ -1,0 +1,67 @@
+<section id="reviews">
+  <h2>Reviews</h2>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <ul class="history">
+  {% for x in reviews %}
+    <li><span class="verdict verdict-{{ x.r.verdict }}">{{ x.r.label }}</span> by {{ x.r.author_email }}, {{ x.r.created_at.strftime("%Y-%m-%d") }} at <code>{{ x.r.commit_sha | short }}</code>
+      {%- if x.older %} <span class="chip older">on an older version</span>{% endif %}
+      {%- if x.r.note %}<br>{{ x.r.note }}{% endif %}</li>
+  {% else %}
+    <li class="meta">No reviews yet.</li>
+  {% endfor %}
+  </ul>
+  <form method="post" action="{{ here }}/reviews" class="review">
+    <input type="hidden" name="sha" value="{{ snap.sha }}">
+    <fieldset>
+      <legend>Your review of this version</legend>
+      {% for v, label in verdicts.items() %}<label class="inline"><input type="radio" name="verdict" value="{{ v }}" required> {{ label }}</label>{% endfor %}
+      <label>Note <input name="note" maxlength="{{ note_chars }}"></label>
+      <button class="primary">Record review</button>
+    </fieldset>
+  </form>
+</section>
+
+<section id="files">
+  <h2>Files</h2>
+  {% for f in attached %}<p><code>{{ f.name }}</code> v{{ f.version }} · {{ f.uploaded_by }}</p>{% endfor %}
+  {# TODO(storage): enable once storage.sustenaut.eu takes general files server-side (opportunity/files.py). #}
+  <p><button type="button" disabled>Upload a file</button> <span class="hint">Attachments and client documents will be kept in storage.sustenaut.eu, not git. Not switched on yet.</span></p>
+</section>
+
+<section id="comments">
+  <h2>Comments</h2>
+  {% for t in threads %}
+  {% set c = t.root %}
+  <div class="thread{% if c.resolved_by %} resolved{% endif %}" id="c{{ c.id }}">
+    <p class="meta">On <strong>{{ anchors.get(c.anchor, c.anchor or "all of it") }}</strong> · {{ c.author_email }}, {{ c.created_at.strftime("%Y-%m-%d %H:%M") }} at <code>{{ c.commit_sha | short }}</code>
+      {%- if t.older %} <span class="chip older">on an older version</span>{% endif %}
+      {%- if c.resolved_by %} · <span class="chip done">resolved by {{ c.resolved_by }}</span>{% endif %}</p>
+    <p class="text">{{ c.body }}</p>
+    {% for r in t.replies %}
+    <div class="reply"><p class="meta">{{ r.author_email }}, {{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</p><p class="text">{{ r.body }}</p></div>
+    {% endfor %}
+    {% if not c.resolved_by %}
+    <form method="post" action="{{ here }}/comments" class="replyform">
+      <input type="hidden" name="parent" value="{{ c.id }}"><input type="hidden" name="sha" value="{{ snap.sha }}">
+      <label>Reply <textarea name="body" rows="2" required></textarea></label>
+      <button>Reply</button>
+    </form>
+    {% if who.may_resolve(c.author_email) %}
+    <form method="post" action="/comments/{{ c.id }}/resolve"><button>Resolve</button></form>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="meta">No comments yet.</p>
+  {% endfor %}
+
+  <form method="post" action="{{ here }}/comments" id="comment" class="comment">
+    <input type="hidden" name="sha" value="{{ snap.sha }}">
+    <label>On <select name="anchor" id="anchor">
+      {% for a, label in anchors.items() %}<option value="{{ a }}" {% if a == anchor %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></label>
+    <label>Comment <textarea name="body" rows="4" required></textarea></label>
+    <button class="primary">Post comment</button>
+  </form>
+</section>
+<script src="/static/pick.js" defer></script>

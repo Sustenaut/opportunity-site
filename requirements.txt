@@ -1,0 +1,11 @@
+# What the opportunity site's image installs, pinned by ../requirements.lock
+# (pip install -r opportunity-site/requirements.txt -c requirements.lock).
+fastapi
+uvicorn
+Jinja2
+Markdown  # card and report bodies
+PyYAML  # the cards' front matter (bizplan/opportunities.py)
+pandas  # bizplan.opportunities.rows
+psycopg[binary]  # comments and reviews in PostgreSQL
+requests  # the GitHub API
+cryptography  # signs the GitHub App's JWT

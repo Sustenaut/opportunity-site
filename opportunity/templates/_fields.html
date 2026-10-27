@@ -1,0 +1,11 @@
+<details class="fields" open>
+  <summary>Fields</summary>
+  <dl>
+  {% for k, v in fields %}
+    <dt id="f-{{ k }}">{{ k }} <a class="pick" data-anchor="f:{{ k }}" href="{{ here }}?anchor=f:{{ k }}#comment">Comment</a></dt>
+    <dd>{% if v is mapping %}{% for a, b in v.items() %}{{ a }}: {{ b }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+      {%- elif v is iterable and v is not string %}<ul>{% for x in v %}<li>{{ x }}</li>{% endfor %}</ul>
+      {%- elif v is none %}<span class="meta">none</span>{% else %}{{ v }}{% endif %}</dd>
+  {% endfor %}
+  </dl>
+</details>

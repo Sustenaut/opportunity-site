@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Opportunities{% endblock %} · Sustenaut</title>
+<link rel="stylesheet" href="/static/opportunity.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Sustenaut opportunities</a>
+  <span class="who">{{ who.email }}{% if who.owner %} · owner{% endif %}{% if who.login == "dev" %} · local{% endif %}</span>
+</header>
+<main>
+{% block main %}{% endblock %}
+</main>
+<footer>Showing business-plan main at <code>{{ snap.sha | short }}</code>. The cards live in git: edits here become pull requests, and change nothing until one is merged.</footer>
+</body>
+</html>

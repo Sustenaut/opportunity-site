@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ card_id }}{% endblock %}
+{% block main %}
+<p class="eyebrow"><a href="/c/{{ quote(card_id) }}">{{ card_id }} {{ item.name }}</a> · <code>{{ item.path }}</code></p>
+<h1>Propose an edit</h1>
+<p class="rule"><strong>The rule:</strong> {{ rule }}</p>
+<p class="hint">Each field is YAML, as in the file. Submitting opens a pull request in schryer/business-plan that names you; the card changes when it is merged.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<form method="post">
+  <input type="hidden" name="sha" value="{{ sha }}">
+  {% for k, v in fields %}
+  {% set h = hints.get(k) %}
+  <label>{{ k }}{% if h %} <span class="hint">{{ h[0] }}, e.g. <code>{{ h[1] }}</code></span>{% endif %}
+    {% if k == "id" %}<input value="{{ v }}" readonly>
+    {% else %}<textarea name="f:{{ k }}" rows="{{ [2, v.count('\n') + 2] | max }}">
+{{ v }}</textarea>{% endif %}
+  </label>
+  {% endfor %}
+  <label>Body (Markdown) <textarea name="body" rows="18">
+{{ body }}</textarea></label>
+  <label>Why (goes in the pull request) <textarea name="note" rows="3">{{ note }}</textarea></label>
+  <div class="actions"><button class="primary">Open a pull request</button> <a href="/c/{{ quote(card_id) }}">Cancel</a></div>
+</form>
+{% endblock %}

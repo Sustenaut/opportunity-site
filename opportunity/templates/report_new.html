@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Add a research report{% endblock %}
+{% block main %}
+<h1>Add a research report</h1>
+<p class="hint">A report informs one or more cards: market sizing, competitors, a study. It goes to <code>opportunities/research/&lt;file name&gt;.md</code> through a pull request that names you. Photos, figures and client documents go to storage.sustenaut.eu, not into the report.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<form method="post">
+  <label>File name <input name="slug" value="{{ form.slug }}" placeholder="example-market" required></label>
+  <label>Title <input name="title" value="{{ form.title }}" required></label>
+  <label>Cards it informs <span class="hint">ids, separated by commas: {{ snap.cards | join(", ") }}</span><input name="cards" value="{{ form.cards }}" required></label>
+  <label>Summary <span class="hint">one sentence</span><input name="summary" value="{{ form.summary }}" required></label>
+  <label>Sources <span class="hint">the pages it took facts from, one web address per line</span><textarea name="sources" rows="4" required>{{ form.sources }}</textarea></label>
+  <label>Report (Markdown) <textarea name="body" rows="18" required>
+{{ form.body }}</textarea></label>
+  <label>Note for the pull request <textarea name="note" rows="2">{{ form.note }}</textarea></label>
+  <div class="actions"><button class="primary">Open a pull request</button> <a href="/">Cancel</a></div>
+</form>
+{% endblock %}

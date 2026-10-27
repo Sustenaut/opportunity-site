@@ -1,0 +1,20 @@
+{
+  "_about": "Fake comments and reviews for `make opportunity`, loaded into the in-memory store. The commit is made up, so each shows as on an older version.",
+  "comments": [
+    {"subject": "OPP-10", "anchor": "f:kill_point", "sha": "0000000000000000000000000000000000000000",
+     "author": "reviewer@example.org", "body": "Is this date the right gate if onboarding stalls?"},
+    {"subject": "OPP-10", "parent": 1, "sha": "0000000000000000000000000000000000000000",
+     "author": "owner@example.org", "body": "It is the gate; the card says what we decide there."},
+    {"subject": "OPP-10", "anchor": "", "sha": "0000000000000000000000000000000000000000",
+     "author": "reviewer@example.org", "body": "Hours look right.", "resolved_by": "reviewer@example.org"},
+    {"subject": "research/example-market", "anchor": "s:verdict",
+     "sha": "0000000000000000000000000000000000000000", "author": "reviewer@example.org",
+     "body": "Which of the competitors here sells to companies our size?"}
+  ],
+  "reviews": [
+    {"subject": "OPP-10", "verdict": "concerns", "note": "Timing depends on the sandbox, not on hours.",
+     "sha": "0000000000000000000000000000000000000000", "author": "reviewer@example.org"},
+    {"subject": "research/example-market", "verdict": "reviewed",
+     "sha": "0000000000000000000000000000000000000000", "author": "owner@example.org"}
+  ]
+}

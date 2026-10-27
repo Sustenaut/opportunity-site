@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }}{% endblock %}
+{% block main %}
+<p class="eyebrow">Research report for {% for c in item.cards or [] %}<a href="/c/{{ quote(c) }}">{{ c }}</a>{% if not loop.last %}, {% endif %}{% endfor %} · <code>{{ item.path }}</code></p>
+<h1>{{ item.title }}</h1>
+{% include "_fields.html" %}
+<article class="body">{{ body }}</article>
+{% include "_discussion.html" %}
+{% endblock %}
