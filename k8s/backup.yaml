@@ -1,0 +1,65 @@
+# Nightly dump of the site's database to the Google Cloud Storage bucket
+# sustenaut-opportunity-backups (infra/opportunity.tf: in Finland, kept 30 days,
+# written by an account that can only create objects). Restore: opportunity-site/README.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+spec:
+  schedule: "27 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: backup
+        spec:
+          restartPolicy: Never
+          volumes:
+            - name: dump
+              emptyDir: {}
+            - name: gcs-key
+              secret:
+                secretName: opportunity-secrets
+                items:
+                  - key: backup-gcs-key
+                    path: key.json
+          initContainers:
+            - name: dump
+              image: docker.io/library/postgres:16.14
+              command:
+                - sh
+                - -c
+                - pg_dump -h postgres -U opportunity -d opportunity -Fc -f "/dump/opportunity-$(date -u +%Y%m%dT%H%M%SZ).dump"
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: opportunity-secrets
+                      key: db-password
+              volumeMounts:
+                - name: dump
+                  mountPath: /dump
+          containers:
+            - name: upload
+              image: gcr.io/google.com/cloudsdktool/google-cloud-cli:587.0.0-slim
+              command:
+                - sh
+                - -c
+                - >-
+                  gcloud auth activate-service-account --key-file=/key/key.json --quiet &&
+                  gcloud storage cp /dump/*.dump gs://sustenaut-opportunity-backups/
+              volumeMounts:
+                - name: dump
+                  mountPath: /dump
+                - name: gcs-key
+                  mountPath: /key
+                  readOnly: true
+              resources:
+                limits:
+                  memory: 512Mi

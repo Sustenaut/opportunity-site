@@ -1,0 +1,20 @@
+# The opportunity site on the Sustenaut k3s server (infra/hetzner.tf), namespace
+# opportunity: the app, its own PostgreSQL, oauth2-proxy in front of it, the
+# ingress for opportunity.sustenaut.eu and a nightly database dump.
+# Rendered by .github/workflows/opportunity-site.yml with the image it just built
+# (kustomize edit set image) and applied by sustenaut-deploy on the server.
+# Not here: the Secrets opportunity-secrets and ghcr-pull, and the network policy
+# in admin/ (the deploy identity may not manage those); opportunity-site/push-secrets.sh
+# puts them in.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: opportunity
+resources:
+  - postgres.yaml
+  - app.yaml
+  - oauth2-proxy.yaml
+  - ingress.yaml
+  - backup.yaml
+images:
+  - name: ghcr.io/schryer/sustenaut-opportunity
+    newTag: unset

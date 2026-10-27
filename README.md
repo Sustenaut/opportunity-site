@@ -2,9 +2,8 @@
 
 The opportunity cards (`opportunities/OPP-nn.md`) and the research reports
 under them (`opportunities/research/`), for the team to read, comment on,
-review and propose changes to, at opportunity.sustenaut.eu. This is step 2
-of the opportunity site (design approved 2026-10-27): the app. Hosting, DNS
-and the deploy workflow are step 4.
+review and propose changes to, at opportunity.sustenaut.eu. Steps 2 (the app) and 4 (hosting, below) of the opportunity site (design
+approved 2026-10-27).
 
 The cards stay in git. The site reads a checkout of business-plan main,
 pulled at most once a minute, and says on every page which commit it shows.
@@ -64,6 +63,32 @@ anchor chosen. A form post must come from the site's own pages (its
 Without a database URL or GitHub App, the site keeps comments in memory and
 writes proposals under `OPPORTUNITY_PROPOSALS_DIR`; both are refused on a
 cluster.
+
+## Hosting
+
+On the Sustenaut k3s server (`infra/hetzner.tf`), namespace `opportunity`,
+like auth (`services/auth/`):
+
+| Piece | Where |
+|---|---|
+| The app | `k8s/app.yaml`: one replica, private image `ghcr.io/schryer/sustenaut-opportunity`, the checkout in an emptyDir. No ingress points at it, and `k8s/admin/network-policy.yaml` lets only oauth2-proxy reach it. |
+| PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
+| oauth2-proxy | `k8s/oauth2-proxy.yaml`: Google sign-in, only the emails in `var.team` (from `terraform output opportunity`, the list review and plan use). It passes the account on in `X-Forwarded-Email`. `/healthz` and `/storage-in-use.json` are open without sign-in. |
+| Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in `pubkit.json`. |
+| Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (`infra/opportunity.tf`, kept 30 days). |
+| Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets`, the image pull secret `ghcr-pull` and the network policy, over the admin key. |
+| Deploys | `.github/workflows/opportunity-site.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like `auth.yml`. |
+
+When `var.team` changes, run `push-secrets.sh` again and restart both
+deployments (its header says how).
+
+Restore a dump (as for auth):
+
+```sh
+gcloud storage cp gs://sustenaut-opportunity-backups/opportunity-<when>.dump .
+ssh root@sustenaut k3s kubectl -n opportunity exec -i postgres-0 -- \
+  pg_restore -U opportunity -d opportunity --clean --if-exists < opportunity-<when>.dump
+```
 
 ## Running it locally
 

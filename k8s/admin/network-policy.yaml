@@ -1,0 +1,43 @@
+# Applied by opportunity-site/push-secrets.sh over the admin key: the deploy
+# identity may not manage network policies. k3s enforces them (kube-router).
+#
+# The app trusts the email header the proxy sets, so only the proxy's pods may
+# reach it; only the app and the nightly dump may reach the database.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-only-from-proxy
+  namespace: opportunity
+spec:
+  podSelector:
+    matchLabels:
+      app: opportunity
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: oauth2-proxy
+      ports:
+        - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-only-from-app-and-backup
+  namespace: opportunity
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: opportunity
+        - podSelector:
+            matchLabels:
+              app: backup
+      ports:
+        - port: 5432

@@ -1,0 +1,97 @@
+# The opportunity site (opportunity-site/opportunity). It trusts the email
+# oauth2-proxy puts in X-Forwarded-Email, so nothing but the proxy may reach it:
+# no ingress points here, and admin/network-policy.yaml lets in only the proxy's
+# pods. It clones business-plan main into an emptyDir at its first request and
+# pulls it at most once a minute, with the GitHub App's installation token.
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+spec:
+  selector:
+    app: opportunity
+  ports:
+    - name: http
+      port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opportunity
+  template:
+    metadata:
+      labels:
+        app: opportunity
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull # the image holds bizplan/, so it stays private
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: app
+          image: ghcr.io/schryer/sustenaut-opportunity
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: OPPORTUNITY_LOGIN
+              value: proxy
+            - name: TEAM # Terraform's var.team, the list review and plan use
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: team
+            - name: OPPORTUNITY_OWNER
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: owner
+            # libpq reads the password from PGPASSWORD, so it never sits in a URL.
+            - name: OPPORTUNITY_DATABASE_URL
+              value: host=postgres dbname=opportunity user=opportunity
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: db-password
+            - name: OPPORTUNITY_GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: github-app-id
+            - name: OPPORTUNITY_GITHUB_APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: github-app-key
+            - name: OPPORTUNITY_GITHUB_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: opportunity-secrets
+                  key: github-installation-id
+            - name: OPPORTUNITY_REPO_DIR
+              value: /data/business-plan
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: checkout
+              mountPath: /data
+      volumes:
+        - name: checkout
+          emptyDir: {}
