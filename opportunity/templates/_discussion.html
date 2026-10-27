@@ -23,7 +23,7 @@
 
 <section id="files">
   <h2>Files</h2>
-  {% for f in attached %}<p><code>{{ f.name }}</code> v{{ f.version }} · {{ f.uploaded_by }}</p>{% endfor %}
+  {% for f in attached %}<p><a href="{{ f.url }}">{{ f.name }}</a>{% if f.label %} · {{ f.label }}{% endif %}{% if f.kept %} <span class="chip done">kept</span>{% endif %} · {{ f.uploaded_by }}</p>{% endfor %}
   {# TODO(storage): enable once storage.sustenaut.eu takes general files server-side (opportunity/files.py). #}
   <p><button type="button" disabled>Upload a file</button> <span class="hint">Attachments and client documents will be kept in storage.sustenaut.eu, not git. Not switched on yet.</span></p>
 </section>

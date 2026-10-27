@@ -37,10 +37,12 @@ branch `opportunity/<card or report>-<user>-<n>` and a pull request that
 names the editor, through a GitHub App. If the file changed on main since
 the form was loaded, nothing is opened and the form says to reload.
 
-**Files.** Attachments and versioned client documents will live in
+**Files.** Attachments and client documents (uploaded `kept`, so never cleaned up) will live in
 storage.sustenaut.eu (tenant `opportunity`), not git. `opportunity/files.py`
-has the interface and a fake; the upload button is disabled until the
-storage service takes general files server-side (its own PR first).
+has the interface, a client for storage's `POST /opportunity/files` (with
+the GitHub App's installation token, naming the person in `for`) and a
+fake. The upload button stays disabled until the site records its uploads
+and publishes `/storage-in-use.json`, and storage is deployed.
 
 Pages are server-rendered forms. The only script picks a comment's anchor
 without a reload; without it, the same links reload the page with the

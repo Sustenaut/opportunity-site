@@ -344,20 +344,29 @@ def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
 
 # --- Files -------------------------------------------------------------------
 
-def test_files_wait_for_storage(site):
+def test_files_wait_for_storage(site, monkeypatch):
     client, *_ = site
     assert files.from_env() is None
     assert '<button type="button" disabled>Upload a file</button>' in client.get("/c/OPP-10").text
-    with pytest.raises(NotImplementedError):
-        files.StorageClient().put("OPP-10", "a.pdf", b"x", "application/pdf", ME)
     fake = files.FakeFiles()
-    fake.put("OPP-10", "offer.pdf", b"v1", "application/pdf", ME, kind="document")
-    latest = fake.put("OPP-10", "offer.pdf", b"v2", "application/pdf", ME, kind="document")
-    assert latest.key == "opportunity/OPP-10/offer.pdf/v2" and fake.read(latest.key) == b"v2"
-    assert [f.version for f in fake.list("OPP-10")] == [2]
-    fake.put("OPP-10", "photo.jpg", b"x", "image/jpeg", ME)
-    with pytest.raises(ValueError):
-        fake.put("OPP-10", "photo.jpg", b"y", "image/jpeg", ME)
+    sent = fake.put("OPP-10", "offer.pdf", b"%PDF-1", ME, label="OPP-10 offer v1", kept=True)
+    again = fake.put("OPP-10", "offer.pdf", b"%PDF-1", ME)  # the same file again stays kept
+    v2 = fake.put("OPP-10", "offer.pdf", b"%PDF-2", ME, label="OPP-10 offer v2")
+    assert again.kept and sent.id != v2.id and len(fake.list("OPP-10")) == 2
+
+    import requests
+    seen = {}
+
+    def post(url, **kw):
+        seen.update(url=url, **kw)
+        return Reply(200, {"id": "f" * 64, "name": "offer.pdf", "url": f"/opportunity/f/{'f' * 64}/offer.pdf",
+                           "type": "application/pdf", "size": 6, "label": "v1", "kept": True})
+    monkeypatch.setattr(requests, "post", post)
+    stored = files.StorageClient(lambda: "ghs_token").put("OPP-10", "offer.pdf", b"%PDF-1", ME, label="v1", kept=True)
+    assert seen["url"] == "https://storage.sustenaut.eu/opportunity/files"
+    assert seen["headers"]["Authorization"] == "Bearer ghs_token"
+    assert seen["data"] == {"name": "offer.pdf", "label": "v1", "kept": "true", "for": ME}
+    assert stored.url == f"https://storage.sustenaut.eu/opportunity/f/{'f' * 64}/offer.pdf" and stored.kept
 
 
 # --- PostgreSQL --------------------------------------------------------------
