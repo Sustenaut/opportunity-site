@@ -80,7 +80,7 @@ like auth (`services/auth/`):
 | Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets`, the image pull secret `ghcr-pull` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
 | Deploys | `.github/workflows/opportunity-site.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like `auth.yml`. |
 
-When `var.team` changes: `terraform apply`, then `services/auth/invite-team.sh`
+When `var.team` changes: `terraform apply`, then `SUSTENAUT_SERVER=sustenaut ./with-secrets services/auth/invite-team.sh`
 (accounts in the team realm: invitations for new people, disabled for removed ones),
 then `push-secrets.sh` again and restart both deployments (its header says how).
 
@@ -105,7 +105,7 @@ registered, invited or deployed yet. Steps 1 to 7 of `services/auth/README.md`,
 4. `./with-secrets terraform -chdir=infra apply`: the backup bucket, its account and
    key, the DNS record for opportunity.sustenaut.eu, and the `auth_team` output.
 5. **The team realm**: run the `auth` workflow (or merge), so the realm job creates
-   the realm; then `./with-secrets services/auth/invite-team.sh`. Everyone in
+   the realm; then `SUSTENAUT_SERVER=sustenaut ./with-secrets services/auth/invite-team.sh`. Everyone in
    `var.team` and the registrant (`var.team_registrant`, default `admin@sustenaut.eu`)
    get an invitation; set up the registrant's passkey from it (or use a code later).
 6. Make the namespace on the running server, once: `ssh root@sustenaut sustenaut-app
