@@ -1,7 +1,8 @@
 """Who is reading, set by OPPORTUNITY_LOGIN:
 
 - ``proxy`` (the default, for now): the site sits behind oauth2-proxy, which
-  signs people in with Google and passes the email on in X-Forwarded-Email,
+  signs people in with the team realm at auth.sustenaut.eu (a passkey or an
+  emailed code) and passes the verified email on in X-Forwarded-Email,
   replacing any such header the browser sent. The site trusts that one header
   (OPPORTUNITY_EMAIL_HEADER names another), so it must not be reachable except
   through the proxy. Other headers, such as X-Auth-Request-Email, the proxy

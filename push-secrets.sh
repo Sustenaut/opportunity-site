@@ -10,22 +10,21 @@
 # From Bitwarden (which with-secrets exports in upper case):
 #   opportunity-db-password                 the site's PostgreSQL password
 #   opportunity-cookie-secret               oauth2-proxy's cookie secret (32 random bytes, base64)
-#   opportunity-google-client-id            the Google OAuth client oauth2-proxy signs in with
-#   opportunity-google-client-secret
 #   opportunity-github-app-id               the GitHub App that opens pull requests
 #   opportunity-github-app-key              its private key (PEM)
 #   opportunity-github-installation-id      its installation on schryer/business-plan
 #   opportunity-ghcr-pull-token             a token with read:packages, to pull the private image
 # From Terraform: the team (var.team), the owner, and the backup key.
+# Not here: the sign-in client oauth2-proxy uses (the Secret opportunity-oidc), which
+# register-client.sh registers with auth.sustenaut.eu and puts in on the server.
 # They travel to the server inside the SSH connection, never on a command line.
 # The pods read them at start: after a change, restart them with
 #   ssh root@sustenaut k3s kubectl -n opportunity rollout restart deployment/app deployment/oauth2-proxy
 set -euo pipefail
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
-for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GOOGLE_CLIENT_ID \
-  OPPORTUNITY_GOOGLE_CLIENT_SECRET OPPORTUNITY_GITHUB_APP_ID OPPORTUNITY_GITHUB_APP_KEY \
-  OPPORTUNITY_GITHUB_INSTALLATION_ID OPPORTUNITY_GHCR_PULL_TOKEN; do
+for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GITHUB_APP_ID \
+  OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID OPPORTUNITY_GHCR_PULL_TOKEN; do
   if [ -z "${!name:-}" ]; then
     echo "$name is not set: run this through ./with-secrets, and check the secret is in Bitwarden." >&2
     exit 1
@@ -53,8 +52,6 @@ metadata:
 data:
   db-password: $(b64 "$OPPORTUNITY_DB_PASSWORD")
   cookie-secret: $(b64 "$OPPORTUNITY_COOKIE_SECRET")
-  google-client-id: $(b64 "$OPPORTUNITY_GOOGLE_CLIENT_ID")
-  google-client-secret: $(b64 "$OPPORTUNITY_GOOGLE_CLIENT_SECRET")
   github-app-id: $(b64 "$OPPORTUNITY_GITHUB_APP_ID")
   github-app-key: $(b64 "$OPPORTUNITY_GITHUB_APP_KEY")
   github-installation-id: $(b64 "$OPPORTUNITY_GITHUB_INSTALLATION_ID")
