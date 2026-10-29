@@ -1,6 +1,6 @@
 # oauth2-proxy signs people in with the team realm at auth.sustenaut.eu (Keycloak:
 # a passkey or an emailed code; accounts only for var.team, made by
-# services/auth/invite-team.sh), as the client sustenaut.eu registered for its team
+# Sustenaut/auth's invite-team.sh), as the client sustenaut.eu registered for its team
 # sites (register-client.sh puts its id and secret in the Secret opportunity-oidc).
 # As a second check it lets in only the emails in Terraform's var.team, the same list
 # the app checks: push-secrets.sh puts it in the Secret, so there is no second list.
