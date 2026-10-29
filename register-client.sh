@@ -3,17 +3,17 @@
 # puts the client into the cluster as the Secret opportunity-oidc (namespace
 # opportunity), which oauth2-proxy signs in with. No client secret is made by hand or
 # kept in Bitwarden: sustenaut.eu registers its client itself, approved by a DNS
-# record (services/auth/README.md, "Domains register for sign-in"). The client is
+# record (Sustenaut/auth's README.md, "Domains register for sign-in"). The client is
 # sustenaut.eu's, for every team site on the domain; this site adds its redirect URIs.
 #
 # Run it from the repository root, signed in to Sustenaut's tailnet, as often as you
-# like; each run moves one step (services/auth/register-app.py, which runs on the
+# like; each run moves one step (Sustenaut/auth's register-app.py, which runs on the
 # server, where the client is kept, in /root/.config/sustenaut-auth/team-sustenaut.eu/):
 #
 #   opportunity-site/register-client.sh
 #
 # 1. It prints a link and a code: sign in there as the registrant (var.team_registrant,
-#    invited by services/auth/invite-team.sh) and confirm. auth.sustenaut.eu answers
+#    invited by Sustenaut/auth's invite-team.sh) and confirm. auth.sustenaut.eu answers
 #    with a TXT record; the script writes it into infra/auth-approvals.json.
 # 2. Commit that (a PR), merge, `./with-secrets terraform -chdir=infra apply`.
 # 3. Run this again: sign in again; once auth.sustenaut.eu sees the record
@@ -26,13 +26,16 @@ domain=sustenaut.eu
 auth=${AUTH_REALM_URL:-https://auth.sustenaut.eu/realms/team}
 state=/root/.config/sustenaut-auth/team-$domain
 
+# register-app.py is Sustenaut/auth's: a checkout of it beside this one, or AUTH=its path.
+register_app="${AUTH:-$root/../auth}/register-app.py"
+[ -f "$register_app" ] || { echo "no $register_app: clone Sustenaut/auth beside business-plan or set AUTH" >&2; exit 1; }
 server=${SUSTENAUT_SERVER:-$(terraform -chdir="$root/infra" output -json sustenaut_server | jq -r .ssh_host)}
 
 # The script goes on stdin; its sign-in instructions come back on stderr, its result on stdout.
 # shellcheck disable=SC2029 # the names are this machine's on purpose
 registration="$(ssh "root@$server" "python3 -I - --state-dir $state --auth $auth --domain $domain \
   --name 'sustenaut.eu team sites' --redirect https://$host/oauth2/callback --logout https://$host/" \
-  < "$root/services/auth/register-app.py" || true)"
+  < "$register_app" || true)"
 status="$(jq -r .status <<<"$registration" 2>/dev/null || echo error)"
 case "$status" in
   ok | registered)

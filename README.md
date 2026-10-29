@@ -67,27 +67,27 @@ cluster.
 ## Hosting
 
 On the Sustenaut k3s server (`infra/hetzner.tf`), namespace `opportunity`,
-like auth (`services/auth/`):
+like auth (Sustenaut/auth):
 
 | Piece | Where |
 |---|---|
 | The app | `k8s/app.yaml`: one replica, private image `ghcr.io/schryer/sustenaut-opportunity`, the checkout in an emptyDir. No ingress points at it, and `k8s/admin/network-policy.yaml` lets only oauth2-proxy reach it. |
 | PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
-| oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code; accounts only for `var.team`, `services/auth/invite-team.sh`), and as a second check only the emails in `var.team` (from `terraform output opportunity`, the list review and plan use). It passes the account's verified email on in `X-Forwarded-Email`, the only identity header the app trusts. `/healthz` and `/storage-in-use.json` are open without sign-in. |
-| Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, `services/auth/README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
+| oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code; accounts only for `var.team`, `Sustenaut/auth's invite-team.sh`), and as a second check only the emails in `var.team` (from `terraform output opportunity`, the list review and plan use). It passes the account's verified email on in `X-Forwarded-Email`, the only identity header the app trusts. `/healthz` and `/storage-in-use.json` are open without sign-in. |
+| Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
 | Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in `pubkit.json`. |
 | Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (`infra/opportunity.tf`, kept 30 days). |
 | Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets`, the image pull secret `ghcr-pull` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
-| Deploys | `.github/workflows/opportunity-site.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like `auth.yml`. |
+| Deploys | `.github/workflows/opportunity-site.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like Sustenaut/auth's `auth.yml`. |
 
-When `var.team` changes: `terraform apply`, then `SUSTENAUT_SERVER=sustenaut ./with-secrets services/auth/invite-team.sh`
+When `var.team` changes: `terraform apply`, then `SUSTENAUT_SERVER=sustenaut ./with-secrets ./invite-team.sh` in a Sustenaut/auth checkout
 (accounts in the team realm: invitations for new people, disabled for removed ones),
 then `push-secrets.sh` again and restart both deployments (its header says how).
 
 ### Going live
 
 What only David does, in this order. Nothing here has been applied, pushed,
-registered, invited or deployed yet. Steps 1 to 7 of `services/auth/README.md`,
+registered, invited or deployed yet. Steps 1 to 7 of Sustenaut/auth's `README.md`,
 "Deploying", are done first (the server, the tailnet, the deploy secrets).
 
 1. **GitHub App** on schryer/business-plan: Repository permissions *Contents: Read
@@ -105,7 +105,7 @@ registered, invited or deployed yet. Steps 1 to 7 of `services/auth/README.md`,
 4. `./with-secrets terraform -chdir=infra apply`: the backup bucket, its account and
    key, the DNS record for opportunity.sustenaut.eu, and the `auth_team` output.
 5. **The team realm**: run the `auth` workflow (or merge), so the realm job creates
-   the realm; then `SUSTENAUT_SERVER=sustenaut ./with-secrets services/auth/invite-team.sh`. Everyone in
+   the realm; then `SUSTENAUT_SERVER=sustenaut ./with-secrets ./invite-team.sh` in a Sustenaut/auth checkout. Everyone in
    `var.team` and the registrant (`var.team_registrant`, default `admin@sustenaut.eu`)
    get an invitation; set up the registrant's passkey from it (or use a code later).
 6. Make the namespace on the running server, once: `ssh root@sustenaut sustenaut-app

@@ -7,8 +7,8 @@
 # run sustenaut-deploy: apply in namespace opportunity and wait. SSH is reachable
 # over Sustenaut's tailnet only, so the job joins it first, as tag:ci.
 #
-# Needs the same secrets and variables as .github/workflows/auth.yml
-# (services/auth/README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
+# Needs the same secrets and variables as Sustenaut/auth's auth.yml
+# (Sustenaut/auth's README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
 # built and pushed, and nothing is deployed.
 name: opportunity site
 
