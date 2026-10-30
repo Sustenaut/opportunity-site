@@ -5,7 +5,7 @@ A card's front matter is edited field by field as text, so a field's YAML
 (and its comments) stays as written unless someone changes it. The result
 must read back cleanly with ``bizplan.opportunities.read`` and give matrix
 rows; a report must name cards that exist and list its sources, as
-tests/test_opportunities.py asks.
+business-plan's tests/test_opportunities.py asks.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from bizplan import opportunities as opp
+from . import cardformat
 
 RULE = ("No dates or build details in opportunity cards: a card says what is true when it is done, "
         "what it costs and what it is worth. When and how it gets built belongs in the plan and in Linear.")
@@ -31,7 +31,7 @@ class Invalid(Exception):
 def hints() -> dict[str, tuple[str, str]]:
     """field -> (what to write, example), from bizplan.opportunities.FIELDS."""
     out = {}
-    for names, what, example in opp.FIELDS:
+    for names, what, example in cardformat.opp().FIELDS:
         for name in names.split(", "):
             out[name] = (what, example)
     return out
@@ -102,7 +102,7 @@ def _read(name: str, text: str) -> dict:
         p = Path(tmp) / name
         p.write_text(text, encoding="utf-8")
         try:
-            return opp.read(p)
+            return cardformat.opp().read(p)
         except (ValueError, yaml.YAMLError) as e:
             raise Invalid(str(e).replace(str(p), name))
 
@@ -120,7 +120,7 @@ def check_card(name: str, old: str, new: str) -> dict:
     if not card.get("name"):
         raise Invalid("A card needs a name")
     try:
-        opp.rows([card])
+        cardformat.opp().rows([card])
     except Exception as e:
         raise Invalid(f"The matrix can't read this card: {type(e).__name__}: {e}")
     return card

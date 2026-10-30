@@ -1,5 +1,5 @@
-"""The opportunity site (opportunity-site/), on a git checkout of the real cards made in a
-temporary folder, the in-memory store, and a fake GitHub. The PostgreSQL store runs too
+"""The opportunity site, on a git checkout of fixture cards and a stand-in card format
+(fixtures/business-plan/) made in a temporary folder, the in-memory store, and a fake GitHub. The PostgreSQL store runs too
 when OPPORTUNITY_TEST_DATABASE_URL names an empty database."""
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "opportunity-site"))
+FIXTURE = ROOT / "tests" / "fixtures" / "business-plan"
+sys.path.insert(0, str(ROOT))
 
-from bizplan import opportunities as opp  # noqa: E402
-from opportunity import auth, content, edits, files, github, main, store  # noqa: E402
+from opportunity import auth, cardformat, content, edits, files, github, main, store  # noqa: E402
 
 ME, OWNER, OTHER = "reviewer@example.org", "owner@example.org", "other@example.org"
 ORIGIN = {"origin": "http://testserver"}
@@ -38,7 +38,7 @@ def commit(repo: Path, message: str) -> str:
 @pytest.fixture
 def repo(tmp_path) -> Path:
     r = tmp_path / "business-plan"
-    shutil.copytree(ROOT / "opportunities", r / "opportunities")
+    shutil.copytree(FIXTURE, r, ignore=shutil.ignore_patterns("__pycache__"))
     git(r, "init", "-q", "-b", "main")
     commit(r, "cards")
     return r
@@ -60,7 +60,9 @@ class FakePublisher:
 def site(repo, monkeypatch):
     s = store.MemoryStore()
     pub = FakePublisher()
-    monkeypatch.setattr(main.Services, "content", content.Content(repo, pull=False))
+    shown = content.Content(repo, pull=False)
+    shown.now()  # imports the card format, as the first request does
+    monkeypatch.setattr(main.Services, "content", shown)
     monkeypatch.setattr(main.Services, "store", s)
     monkeypatch.setattr(main.Services, "publisher", pub)
     monkeypatch.setattr(main.Services, "files", None)
@@ -81,7 +83,8 @@ def as_user(monkeypatch, email):
 def test_index_lists_every_card_ranked_and_filters_by_kind(site):
     client, *_ = site
     page = client.get("/").text
-    cards = opp.load()
+    opp = cardformat.opp()
+    cards = [opp.read(p) for p in sorted((FIXTURE / "opportunities").glob("OPP-*.md"))]
     assert all(f"/c/{c['id']}" in page for c in cards)
     assert "Expected levels per 100 h" in page and "Example market report" in page
     best = opp.rows(cards).sort_values("expected levels per 100 h", ascending=False).iloc[0]["id"]
@@ -93,7 +96,7 @@ def test_index_lists_every_card_ranked_and_filters_by_kind(site):
 def test_card_page_shows_fields_body_and_its_reports(site):
     client, *_ = site
     page = client.get("/c/OPP-01").text
-    card = opp.read(ROOT / "opportunities" / "OPP-01.md")
+    card = cardformat.opp().read(FIXTURE / "opportunities" / "OPP-01.md")
     assert card["name"] in page and 'data-anchor="f:kill_point"' in page
     assert "/r/example-market" in page  # the report names OPP-01
     assert client.get("/c/OPP-99").status_code == 404
@@ -177,8 +180,8 @@ def test_reviews_say_when_they_are_on_an_older_version(site):
 
 # --- Proposing changes -------------------------------------------------------
 
-def test_front_matter_round_trips_for_every_card():
-    for p in (ROOT / "opportunities").glob("OPP-*.md"):
+def test_front_matter_round_trips_for_every_card(site):
+    for p in (FIXTURE / "opportunities").glob("OPP-*.md"):
         text = p.read_text()
         assert edits.join(*edits.split(text)) == text, p.name
         assert edits.edit_card(text, dict(edits.fields_for(text)), edits.split(text)[1]) == text, p.name
@@ -229,7 +232,7 @@ def test_a_research_report_is_added_by_pull_request(site):
     assert change.path == "opportunities/research/wallet-relying-parties.md" and change.old is None
     path = Path(main.Services.content.root) / change.path
     path.write_text(change.new)
-    report = opp.read(path)
+    report = cardformat.opp().read(path)
     assert report["cards"] == ["OPP-10", "OPP-01"] and report["sources"] and report["warning"] == ""
     assert report["body"].startswith("# Who pays for wallet sign-in?")
 
@@ -328,6 +331,34 @@ def test_a_broken_card_is_reported_not_fatal(repo):
     (repo / "opportunities" / "OPP-98.md").write_text("no front matter\n")
     snap = content.Content(repo, pull=False).now()
     assert "OPP-10" in snap.cards and any("OPP-98.md" in p for p in snap.problems)
+
+
+def test_the_card_format_comes_from_the_commit_shown(repo, tmp_path):
+    c = content.Content(tmp_path / "clone", url=str(repo), every=0)
+    assert c.now() and not hasattr(cardformat.opp(), "NEW")
+    format_file = repo / "bizplan" / "opportunities.py"
+    format_file.write_text(format_file.read_text() + "\nNEW = True\n")
+    commit(repo, "the format moves")
+    assert c.now() and cardformat.opp().NEW is True
+
+
+def test_a_broken_format_is_reported_and_the_last_one_stays(repo, tmp_path):
+    c = content.Content(tmp_path / "clone", url=str(repo), every=0)
+    assert "OPP-10" in c.now().cards
+    (repo / "bizplan" / "opportunities.py").write_text("def broken(:\n")
+    commit(repo, "broken")
+    snap = c.now()
+    assert "OPP-10" in snap.cards and any("bizplan.opportunities" in p for p in snap.problems)
+
+
+def test_without_a_format_the_site_says_so(repo, tmp_path, monkeypatch):
+    monkeypatch.setattr(cardformat, "_module", None)
+    shutil.rmtree(repo / "bizplan")
+    commit(repo, "no format")
+    with pytest.raises(ModuleNotFoundError):
+        content.Content(repo, pull=False).now()
+    with pytest.raises(RuntimeError, match="isn't loaded"):
+        cardformat.opp()
 
 
 # --- Login -------------------------------------------------------------------

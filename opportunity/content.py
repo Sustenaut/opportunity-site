@@ -5,7 +5,8 @@ OPPORTUNITY_REPO_DIR names the checkout. When it is missing and
 OPPORTUNITY_REPO_URL is set, the site clones it. It pulls at most once a
 minute (OPPORTUNITY_PULL=0 turns pulling off, as `make opportunity` does), and
 every page says which commit it shows. The repository is private: on the
-cluster, git authenticates with the GitHub App's installation token.
+cluster, git authenticates with the GitHub App's installation token. The code
+that reads the cards comes from that checkout too (cardformat.py).
 
 Comments and reviews keep the commit they were made on; ``current`` tells
 whether the card or report has changed since.
@@ -28,7 +29,7 @@ import markdown
 from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
 
-from bizplan import opportunities as opp
+from . import cardformat
 
 log = logging.getLogger("uvicorn.error")
 
@@ -123,7 +124,7 @@ class Snapshot:
         """One row per card and way (bizplan.opportunities.rows), plus the card's group."""
         if self._rows is None:
             cards = list(self.cards.values())
-            df = opp.rows(cards) if cards else None
+            df = cardformat.opp().rows(cards) if cards else None
             records = [] if df is None else df.astype(object).where(df.notna(), None).to_dict("records")
             for r in records:
                 r["group"] = self.cards[r["id"]].get("group") or ""
@@ -140,7 +141,7 @@ def _read_folder(root: Path, folder: str, pattern: str, problems: list[str]) -> 
         if p.name == "README.md":
             continue
         try:
-            item = opp.read(p)
+            item = cardformat.opp().read(p)
         except Exception as e:  # a broken card must not take the site down
             problems.append(f"{folder}/{p.name}: {e}")
             continue
@@ -154,6 +155,12 @@ def _read_folder(root: Path, folder: str, pattern: str, problems: list[str]) -> 
 
 def snapshot(root: Path, sha: str) -> Snapshot:
     problems: list[str] = []
+    try:
+        cardformat.load(root, sha)
+    except Exception as e:  # a broken commit must not take the site down: read on with the format we have
+        if not cardformat.loaded():
+            raise
+        problems.append(f"{cardformat.MODULE}: {type(e).__name__}: {e}")
     cards = {str(c.get("id")): c for c in _read_folder(root, CARDS, "OPP-*.md", problems)}
     reports = {Path(r["file"]).stem: r for r in _read_folder(root, REPORTS, "*.md", problems)}
     return Snapshot(sha, cards, reports, problems)

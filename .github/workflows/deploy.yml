@@ -1,25 +1,20 @@
 # Build and deploy the opportunity site (opportunity.sustenaut.eu) on each merge
-# to main that touches it, or by hand. The image goes to GitHub's container
-# registry as a private package (it holds bizplan/); the cluster pulls it with
-# the ghcr-pull Secret that opportunity-site/push-secrets.sh puts in. Then the
-# manifests in opportunity-site/k8s/, rendered with that image, go to the
-# Sustenaut k3s server (infra/hetzner.tf) over SSH, where the deploy key can only
-# run sustenaut-deploy: apply in namespace opportunity and wait. SSH is reachable
-# over Sustenaut's tailnet only, so the job joins it first, as tag:ci.
+# to main, or by hand. The image goes to GitHub's container registry and holds
+# no cards and no bizplan: the site reads both from its checkout of
+# business-plan. Then the manifests in k8s/, rendered with that image, go to the
+# Sustenaut k3s server (business-plan's infra/hetzner.tf) over SSH, where the
+# deploy key can only run sustenaut-deploy: apply in namespace opportunity and
+# wait. SSH is reachable over Sustenaut's tailnet only, so the job joins it
+# first, as tag:ci.
 #
 # Needs the same secrets and variables as Sustenaut/auth's auth.yml
 # (Sustenaut/auth's README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
 # built and pushed, and nothing is deployed.
-name: opportunity site
+name: deploy
 
 on:
   push:
     branches: [main]
-    paths:
-      - "opportunity-site/**"
-      - "bizplan/**"
-      - "requirements.lock"
-      - ".github/workflows/opportunity-site.yml"
   workflow_dispatch:
 
 permissions:
@@ -27,7 +22,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: opportunity-site
+  group: deploy
   cancel-in-progress: false
 
 env:
@@ -40,14 +35,16 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build the image
-        run: docker build -f opportunity-site/Dockerfile -t "${IMAGE}:${GITHUB_SHA}" .
+        run: docker build -t "${IMAGE}:${GITHUB_SHA}" .
 
-      # The image must start and hold what the app imports.
+      # The image must start, hold what the app imports and what bizplan needs,
+      # and hold no bizplan: that comes from the checkout at runtime.
       - name: Check the image
         run: |
           docker run --rm "${IMAGE}:${GITHUB_SHA}" python -c '
-          import opportunity.main, psycopg, bizplan.opportunities
+          import importlib.util, opportunity.main, psycopg, pandas, yaml
           from pathlib import Path
+          assert importlib.util.find_spec("bizplan") is None
           assert sorted(p.name for p in Path("opportunity/migrations").glob("*.sql"))'
           docker run --rm --entrypoint git "${IMAGE}:${GITHUB_SHA}" --version
 
@@ -57,7 +54,7 @@ jobs:
           docker push "${IMAGE}:${GITHUB_SHA}"
 
       - name: Render the manifests
-        working-directory: opportunity-site/k8s
+        working-directory: k8s
         run: |
           kustomize edit set image "${IMAGE}=${IMAGE}:${GITHUB_SHA}"
           kustomize build . > "${RUNNER_TEMP}/opportunity.yaml"
