@@ -30,8 +30,6 @@ spec:
     spec:
       serviceAccountName: app # service-accounts.yaml: no RBAC, no API token
       automountServiceAccountToken: false
-      imagePullSecrets:
-        - name: ghcr-pull # until the ghcr package is public (README, "Going live")
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

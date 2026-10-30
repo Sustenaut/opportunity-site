@@ -3,7 +3,7 @@
 # ingress for opportunity.sustenaut.eu and a nightly database dump.
 # Rendered by .github/workflows/deploy.yml with the image it just built
 # (kustomize edit set image) and applied by sustenaut-deploy on the server.
-# Not here: the Secrets opportunity-secrets and ghcr-pull, and the network policy
+# Not here: the Secret opportunity-secrets and the network policy
 # in admin/ (the deploy identity may not manage those), which
 # push-secrets.sh puts in; and the Secret opportunity-oidc (the
 # sign-in client), which register-client.sh puts in.

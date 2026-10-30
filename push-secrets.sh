@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Puts the opportunity site's secrets into the cluster on the Sustenaut k3s
-# server: the Secret opportunity-secrets, the image pull secret ghcr-pull, and the
+# server: the Secret opportunity-secrets and the
 # network policy (k8s/admin/), all in namespace opportunity. Run it from the
 # repository root through with-secrets, after the first terraform apply, whenever
 # a secret changes, and whenever var.team changes:
@@ -13,7 +13,6 @@
 #   opportunity-github-app-id               the GitHub App that opens pull requests
 #   opportunity-github-app-key              its private key (PEM)
 #   opportunity-github-installation-id      its installation on Sustenaut/business-plan
-#   opportunity-ghcr-pull-token             a token with read:packages, to pull the private image
 # From Terraform: the team (var.team), the owner, and the backup key.
 # Not here: the sign-in client oauth2-proxy uses (the Secret opportunity-oidc), which
 # register-client.sh registers with auth.sustenaut.eu and puts in on the server.
@@ -28,7 +27,7 @@ infra="${BUSINESS_PLAN:-$root/../business-plan}/infra"
 [ -d "$infra" ] || { echo "no business-plan checkout at ${infra%/infra}: clone it beside this repository or set BUSINESS_PLAN" >&2; exit 1; }
 
 for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GITHUB_APP_ID \
-  OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID OPPORTUNITY_GHCR_PULL_TOKEN; do
+  OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID; do
   if [ -z "${!name:-}" ]; then
     echo "$name is not set: run this through ./with-secrets, and check the secret is in Bitwarden." >&2
     exit 1
@@ -43,8 +42,6 @@ team_emails=$(jq -r '.team[]' <<<"$site")
 owner=$(jq -r .owner <<<"$site")
 backup_key=$(terraform -chdir="$infra" output -raw opportunity_backup_key) # already base64
 b64() { printf '%s' "$1" | base64 -w0; }
-# The pull token is a classic token of the schryer account, which can read Sustenaut's packages.
-pull=$(printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$(b64 "schryer:$OPPORTUNITY_GHCR_PULL_TOKEN")")
 
 # shellcheck disable=SC2087 # expanded here on purpose: the values go in the SSH stream
 ssh "root@$server" 'k3s kubectl apply -f -' <<YAML
@@ -64,15 +61,6 @@ data:
   team-emails: $(b64 "$team_emails")
   owner: $(b64 "$owner")
   backup-gcs-key: $backup_key
----
-apiVersion: v1
-kind: Secret
-type: kubernetes.io/dockerconfigjson
-metadata:
-  name: ghcr-pull
-  namespace: opportunity
-data:
-  .dockerconfigjson: $(b64 "$pull")
 ---
 $(cat "$root/k8s/admin/network-policy.yaml")
 YAML

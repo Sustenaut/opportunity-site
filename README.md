@@ -89,7 +89,7 @@ like auth (Sustenaut/auth):
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
 | Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in business-plan's `pubkit.json`. |
 | Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (business-plan's `infra/opportunity.tf`, kept 30 days). |
-| Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets`, the image pull secret `ghcr-pull` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
+| Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
 | Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like Sustenaut/auth's `auth.yml`. |
 
 When `var.team` changes: `terraform apply`, then `SUSTENAUT_SERVER=sustenaut ./with-secrets ./invite-team.sh` in a Sustenaut/auth checkout
@@ -106,37 +106,35 @@ business-plan checkout beside this one (`BUSINESS_PLAN` names another path), wit
    and write* and *Pull requests: Read and write*, no webhook. Install it on
    business-plan only and generate a private key. Note the App ID and the
    installation ID (from the installation's URL).
-2. **A ghcr pull token**: a classic personal access token with only `read:packages`.
-3. **Bitwarden** (project Sustenaut): `opportunity-db-password` (random),
+2. **Bitwarden** (project Sustenaut): `opportunity-db-password` (random),
    `opportunity-cookie-secret` (`openssl rand -base64 32 | tr -- '+/' '-_'`),
    `opportunity-github-app-id`, `opportunity-github-app-key` (the PEM),
-   `opportunity-github-installation-id`, `opportunity-ghcr-pull-token`. No sign-in
-   client secret: step 7 registers it. For the team realm's email: the alias
+   `opportunity-github-installation-id`. No sign-in
+   client secret: step 6 registers it. For the team realm's email: the alias
    `noreply@sustenaut.eu` on the mailbox.org account whose app password is already
    `auth-smtp-password`.
-4. `./with-secrets terraform -chdir=infra apply`: the backup bucket, its account and
+3. `./with-secrets terraform -chdir=infra apply`: the backup bucket, its account and
    key, the DNS record for opportunity.sustenaut.eu, and the `auth_team` output.
-5. **The team realm**: run the `auth` workflow (or merge), so the realm job creates
+4. **The team realm**: run the `auth` workflow (or merge), so the realm job creates
    the realm; then `SUSTENAUT_SERVER=sustenaut ./with-secrets ./invite-team.sh` in a Sustenaut/auth checkout. Everyone in
    `var.team` and the registrant (`var.team_registrant`, default `admin@sustenaut.eu`)
    get an invitation; set up the registrant's passkey from it (or use a code later).
-6. Make the namespace on the running server, once: `ssh root@sustenaut sustenaut-app
+5. Make the namespace on the running server, once: `ssh root@sustenaut sustenaut-app
    opportunity`; then `./with-secrets ./push-secrets.sh`.
-7. **Register the sign-in client**: `./register-client.sh`. Sign in at
+6. **Register the sign-in client**: `./register-client.sh`. Sign in at
    the link it prints as the registrant and confirm. It writes the approval record into
    business-plan's `infra/auth-approvals.json`: commit that (a PR there), merge,
    `./with-secrets terraform -chdir=infra apply`, and run `register-client.sh` again
    (sign in again). Once auth.sustenaut.eu sees the record (DNSSEC-validated, so the
    sustenaut.eu DNSSEC move must be live), the client is issued and put in the Secret
    `opportunity-oidc`.
-8. **First deploy**: merge (or run the **deploy** workflow by hand). Then
+7. **First deploy**: merge (or run the **deploy** workflow by hand). Then
    open https://opportunity.sustenaut.eu and sign in with your passkey or a code. A
-   deploy before step 7 leaves oauth2-proxy waiting for the Secret `opportunity-oidc`
+   deploy before step 6 leaves oauth2-proxy waiting for the Secret `opportunity-oidc`
    (its pod doesn't start, the workflow's wait times out); run the workflow again after
-   step 7.
-9. The ghcr package `sustenaut-opportunity` holds no private code: make it **public**
-   in its settings, and give this repository write access under *Manage Actions access*.
-   The pull secret `ghcr-pull` then has nothing left to do, and can go.
+   step 6.
+8. The ghcr package `sustenaut-opportunity` is **public** and holds no private code, so the
+   cluster pulls it without a secret. Give this repository write access under *Manage Actions access*.
 
 If oauth2-proxy can't reach `https://auth.sustenaut.eu` from inside the cluster (it
 fetches the issuer's discovery document at start, and exchanges codes there), its
