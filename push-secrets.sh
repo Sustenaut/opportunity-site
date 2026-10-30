@@ -12,7 +12,7 @@
 #   opportunity-cookie-secret               oauth2-proxy's cookie secret (32 random bytes, base64)
 #   opportunity-github-app-id               the GitHub App that opens pull requests
 #   opportunity-github-app-key              its private key (PEM)
-#   opportunity-github-installation-id      its installation on schryer/business-plan
+#   opportunity-github-installation-id      its installation on Sustenaut/business-plan
 #   opportunity-ghcr-pull-token             a token with read:packages, to pull the private image
 # From Terraform: the team (var.team), the owner, and the backup key.
 # Not here: the sign-in client oauth2-proxy uses (the Secret opportunity-oidc), which
@@ -39,6 +39,7 @@ team_emails=$(jq -r '.team[]' <<<"$site")
 owner=$(jq -r .owner <<<"$site")
 backup_key=$(terraform -chdir="$root/infra" output -raw opportunity_backup_key) # already base64
 b64() { printf '%s' "$1" | base64 -w0; }
+# The pull token is a classic token of the schryer account, which can read Sustenaut's packages.
 pull=$(printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$(b64 "schryer:$OPPORTUNITY_GHCR_PULL_TOKEN")")
 
 # shellcheck disable=SC2087 # expanded here on purpose: the values go in the SSH stream

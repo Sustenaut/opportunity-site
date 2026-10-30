@@ -4,7 +4,7 @@
 <p class="eyebrow"><a href="/c/{{ quote(card_id) }}">{{ card_id }} {{ item.name }}</a> · <code>{{ item.path }}</code></p>
 <h1>Propose an edit</h1>
 <p class="rule"><strong>The rule:</strong> {{ rule }}</p>
-<p class="hint">Each field is YAML, as in the file. Submitting opens a pull request in schryer/business-plan that names you; the card changes when it is merged.</p>
+<p class="hint">Each field is YAML, as in the file. Submitting opens a pull request in Sustenaut/business-plan that names you; the card changes when it is merged.</p>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <form method="post">
   <input type="hidden" name="sha" value="{{ sha }}">

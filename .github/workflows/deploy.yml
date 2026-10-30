@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/schryer/sustenaut-opportunity
+  IMAGE: ghcr.io/sustenaut/sustenaut-opportunity
 
 jobs:
   deploy:

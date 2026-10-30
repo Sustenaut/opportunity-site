@@ -1,8 +1,8 @@
 """Files that go with cards and reports: attachments (photos, figures) and
 client documents built from a report. They are kept in storage.sustenaut.eu
-(schryer/storage) under the tenant ``opportunity``, never in git.
+(Sustenaut/storage) under the tenant ``opportunity``, never in git.
 
-The storage API (schryer/storage, "general files and kept client documents"):
+The storage API (Sustenaut/storage, "general files and kept client documents"):
 
     POST /opportunity/files        multipart "file", "name", "label", "kept", "for"
                                    -> {id, name, url, type, size, label, kept}

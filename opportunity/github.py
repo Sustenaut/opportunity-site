@@ -1,4 +1,4 @@
-"""Proposed changes become pull requests in schryer/business-plan.
+"""Proposed changes become pull requests in Sustenaut/business-plan.
 
 The site never writes to main. An edit is one commit on a new branch,
 ``opportunity/<card or report>-<user>-<n>``, and a pull request naming who
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Protocol
 
 API = "https://api.github.com"
-REPO = "schryer/business-plan"
+REPO = "Sustenaut/business-plan"
 
 
 @dataclass(frozen=True)

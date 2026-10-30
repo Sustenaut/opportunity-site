@@ -17,5 +17,5 @@ resources:
   - ingress.yaml
   - backup.yaml
 images:
-  - name: ghcr.io/schryer/sustenaut-opportunity
+  - name: ghcr.io/sustenaut/sustenaut-opportunity
     newTag: unset

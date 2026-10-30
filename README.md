@@ -57,7 +57,7 @@ anchor chosen. A form post must come from the site's own pages (its
 | `OPPORTUNITY_OWNER` | David's email: may resolve any thread. |
 | `OPPORTUNITY_DATABASE_URL` | PostgreSQL. `opportunity/migrations/*.sql` are applied in name order at start. |
 | `OPPORTUNITY_REPO_DIR`, `OPPORTUNITY_REPO_URL` | The checkout of business-plan main, cloned if missing. `OPPORTUNITY_PULL=0` stops pulling. |
-| `OPPORTUNITY_GITHUB_APP_ID`, `OPPORTUNITY_GITHUB_APP_KEY`, `OPPORTUNITY_GITHUB_INSTALLATION_ID` | The GitHub App (contents and pull requests: write, on schryer/business-plan) that opens pull requests. Its installation token also lets git pull the private repository. |
+| `OPPORTUNITY_GITHUB_APP_ID`, `OPPORTUNITY_GITHUB_APP_KEY`, `OPPORTUNITY_GITHUB_INSTALLATION_ID` | The GitHub App (contents and pull requests: write, on Sustenaut/business-plan) that opens pull requests. Its installation token also lets git pull the private repository. |
 | `OPPORTUNITY_DEV_USER` | Local only, stands in for the login; refused on a cluster. |
 
 Without a database URL or GitHub App, the site keeps comments in memory and
@@ -71,7 +71,7 @@ like auth (Sustenaut/auth):
 
 | Piece | Where |
 |---|---|
-| The app | `k8s/app.yaml`: one replica, private image `ghcr.io/schryer/sustenaut-opportunity`, the checkout in an emptyDir. No ingress points at it, and `k8s/admin/network-policy.yaml` lets only oauth2-proxy reach it. |
+| The app | `k8s/app.yaml`: one replica, private image `ghcr.io/sustenaut/sustenaut-opportunity`, the checkout in an emptyDir. No ingress points at it, and `k8s/admin/network-policy.yaml` lets only oauth2-proxy reach it. |
 | PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
 | oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code; accounts only for `var.team`, `Sustenaut/auth's invite-team.sh`), and as a second check only the emails in `var.team` (from `terraform output opportunity`, the list review and plan use). It passes the account's verified email on in `X-Forwarded-Email`, the only identity header the app trusts. `/healthz` and `/storage-in-use.json` are open without sign-in. |
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
@@ -90,7 +90,7 @@ What only David does, in this order. Nothing here has been applied, pushed,
 registered, invited or deployed yet. Steps 1 to 7 of Sustenaut/auth's `README.md`,
 "Deploying", are done first (the server, the tailnet, the deploy secrets).
 
-1. **GitHub App** on schryer/business-plan: Repository permissions *Contents: Read
+1. **GitHub App** (owned by the Sustenaut org) on Sustenaut/business-plan: Repository permissions *Contents: Read
    and write* and *Pull requests: Read and write*, no webhook. Install it on
    business-plan only and generate a private key. Note the App ID and the
    installation ID (from the installation's URL).
