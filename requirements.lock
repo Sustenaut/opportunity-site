@@ -4,7 +4,7 @@
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
-certifi==2026.7.22
+certifi==2026.10.23
 cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
@@ -19,7 +19,7 @@ jinja2==3.1.6
 markdown==3.11
 markupsafe==3.0.3
 numpy==2.5.3
-opentelemetry-api==1.45.0
+opentelemetry-api==1.45.2
 packaging==26.3
 pandas==3.0.6
 pluggy==1.6.0
