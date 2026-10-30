@@ -53,7 +53,7 @@ class FakePublisher:
         if self.conflict:
             raise github.Conflict("changed on main")
         self.proposals.append({"slug": slug, "user": user, "changes": changes, "title": title, "body": body})
-        return f"https://github.com/schryer/business-plan/pull/{100 + len(self.proposals)}"
+        return f"https://github.com/Sustenaut/business-plan/pull/{100 + len(self.proposals)}"
 
 
 @pytest.fixture
@@ -247,8 +247,8 @@ class FakeGitHub:
         self.files, self.calls = files, []
 
     def __call__(self, method, url, **kw):
-        self.calls.append((method, url.split("/repos/schryer/business-plan")[-1], kw.get("json")))
-        path = url.split("/repos/schryer/business-plan")[-1]
+        self.calls.append((method, url.split("/repos/Sustenaut/business-plan")[-1], kw.get("json")))
+        path = url.split("/repos/Sustenaut/business-plan")[-1]
         if path == "/git/ref/heads/main":
             return Reply(200, {"object": {"sha": "base"}})
         if path.startswith("/contents/") and method == "GET":
@@ -259,7 +259,7 @@ class FakeGitHub:
         if path.startswith("/git/matching-refs/"):
             return Reply(200, [{"ref": "refs/heads/opportunity/OPP-10-david-1"}])
         if path == "/pulls":
-            return Reply(201, {"html_url": "https://github.com/schryer/business-plan/pull/9"})
+            return Reply(201, {"html_url": "https://github.com/Sustenaut/business-plan/pull/9"})
         return Reply(201, {})
 
 

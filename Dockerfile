@@ -6,7 +6,7 @@
 FROM python:3.14-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PORT=8080 \
     PYTHONPATH=/app OPPORTUNITY_REPO_DIR=/data/business-plan \
-    OPPORTUNITY_REPO_URL=https://github.com/schryer/business-plan.git
+    OPPORTUNITY_REPO_URL=https://github.com/Sustenaut/business-plan.git
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
