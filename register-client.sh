@@ -10,12 +10,12 @@
 # like; each run moves one step (Sustenaut/auth's register-app.py, which runs on the
 # server, where the client is kept, in /root/.config/sustenaut-auth/team-sustenaut.eu/):
 #
-#   opportunity-site/register-client.sh
+#   ./register-client.sh
 #
 # 1. It prints a link and a code: sign in there as the registrant (var.team_registrant,
 #    invited by Sustenaut/auth's invite-team.sh) and confirm. auth.sustenaut.eu answers
-#    with a TXT record; the script writes it into infra/auth-approvals.json.
-# 2. Commit that (a PR), merge, `./with-secrets terraform -chdir=infra apply`.
+#    with a TXT record; the script writes it into business-plan's infra/auth-approvals.json.
+# 2. Commit that (a PR in business-plan), merge, `./with-secrets terraform -chdir=infra apply` there.
 # 3. Run this again: sign in again; once auth.sustenaut.eu sees the record
 #    (DNSSEC-validated), the client is issued, kept on the server and put in the
 #    Secret. Restart oauth2-proxy then (the script says how).
@@ -26,10 +26,13 @@ domain=sustenaut.eu
 auth=${AUTH_REALM_URL:-https://auth.sustenaut.eu/realms/team}
 state=/root/.config/sustenaut-auth/team-$domain
 
+# Terraform's outputs and the approval records are in business-plan's infra/: a
+# checkout of it beside this one, or BUSINESS_PLAN=its path.
+infra="${BUSINESS_PLAN:-$root/../business-plan}/infra"
 # register-app.py is Sustenaut/auth's: a checkout of it beside this one, or AUTH=its path.
 register_app="${AUTH:-$root/../auth}/register-app.py"
-[ -f "$register_app" ] || { echo "no $register_app: clone Sustenaut/auth beside business-plan or set AUTH" >&2; exit 1; }
-server=${SUSTENAUT_SERVER:-$(terraform -chdir="$root/infra" output -json sustenaut_server | jq -r .ssh_host)}
+[ -f "$register_app" ] || { echo "no $register_app: clone Sustenaut/auth beside this repository or set AUTH" >&2; exit 1; }
+server=${SUSTENAUT_SERVER:-$(terraform -chdir="$infra" output -json sustenaut_server | jq -r .ssh_host)}
 
 # The script goes on stdin; its sign-in instructions come back on stderr, its result on stdout.
 # shellcheck disable=SC2029 # the names are this machine's on purpose
@@ -61,13 +64,13 @@ PY
     ;;
   waiting)
     value="$(jq -r .record.value <<<"$registration")"
-    approvals="$root/infra/auth-approvals.json"
+    approvals="$infra/auth-approvals.json"
     if [ "$(jq -r '.["@"] // empty' "$approvals")" != "$value" ]; then
       jq --arg v "$value" '.["@"] = $v' "$approvals" > "$approvals.new"
       mv "$approvals.new" "$approvals"
-      echo "Wrote the approval record into infra/auth-approvals.json:"
+      echo "Wrote the approval record into business-plan's infra/auth-approvals.json:"
       echo "  $(jq -r .record.name <<<"$registration") TXT \"$value\""
-      echo "Commit it (a PR), merge, run ./with-secrets terraform -chdir=infra apply, then run this script again."
+      echo "Commit it (a PR in business-plan), merge, run ./with-secrets terraform -chdir=infra apply there, then run this script again."
     else
       echo "auth.sustenaut.eu doesn't see _sustenaut-auth.$domain yet ($(jq -r .message <<<"$registration"))."
       echo "Has terraform apply published it (TTL 300 s), and is $domain DNSSEC-signed? Run this again later."

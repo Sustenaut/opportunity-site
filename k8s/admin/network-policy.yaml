@@ -1,4 +1,4 @@
-# Applied by opportunity-site/push-secrets.sh over the admin key: the deploy
+# Applied by push-secrets.sh over the admin key: the deploy
 # identity may not manage network policies. k3s enforces them (kube-router).
 #
 # The app trusts the email header the proxy sets, so only the proxy's pods may

@@ -1,4 +1,4 @@
-# The opportunity site (opportunity-site/opportunity). It trusts the email
+# The opportunity site (opportunity/). It trusts the email
 # oauth2-proxy puts in X-Forwarded-Email, so nothing but the proxy may reach it:
 # no ingress points here, and admin/network-policy.yaml lets in only the proxy's
 # pods. It clones business-plan main into an emptyDir at its first request and
@@ -31,7 +31,7 @@ spec:
       serviceAccountName: app # service-accounts.yaml: no RBAC, no API token
       automountServiceAccountToken: false
       imagePullSecrets:
-        - name: ghcr-pull # the image holds bizplan/, so it stays private
+        - name: ghcr-pull # until the ghcr package is public (README, "Going live")
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

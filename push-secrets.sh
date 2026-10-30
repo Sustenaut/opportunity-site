@@ -5,7 +5,7 @@
 # repository root through with-secrets, after the first terraform apply, whenever
 # a secret changes, and whenever var.team changes:
 #
-#   ./with-secrets opportunity-site/push-secrets.sh
+#   ./with-secrets ./push-secrets.sh
 #
 # From Bitwarden (which with-secrets exports in upper case):
 #   opportunity-db-password                 the site's PostgreSQL password
@@ -22,6 +22,10 @@
 #   ssh root@sustenaut k3s kubectl -n opportunity rollout restart deployment/app deployment/oauth2-proxy
 set -euo pipefail
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+# Terraform outputs come from business-plan's infra/ (the server, the backup
+# key, var.team): a checkout of it beside this one, or BUSINESS_PLAN=its path.
+infra="${BUSINESS_PLAN:-$root/../business-plan}/infra"
+[ -d "$infra" ] || { echo "no business-plan checkout at ${infra%/infra}: clone it beside this repository or set BUSINESS_PLAN" >&2; exit 1; }
 
 for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GITHUB_APP_ID \
   OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID OPPORTUNITY_GHCR_PULL_TOKEN; do
@@ -32,12 +36,12 @@ for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GITHUB
 done
 
 # SSH reaches the server over Sustenaut's tailnet only (be signed in to it).
-server=$(terraform -chdir="$root/infra" output -json sustenaut_server | jq -r .ssh_host)
-site=$(terraform -chdir="$root/infra" output -json opportunity)
+server=$(terraform -chdir="$infra" output -json sustenaut_server | jq -r .ssh_host)
+site=$(terraform -chdir="$infra" output -json opportunity)
 team=$(jq -r '.team | join(",")' <<<"$site")
 team_emails=$(jq -r '.team[]' <<<"$site")
 owner=$(jq -r .owner <<<"$site")
-backup_key=$(terraform -chdir="$root/infra" output -raw opportunity_backup_key) # already base64
+backup_key=$(terraform -chdir="$infra" output -raw opportunity_backup_key) # already base64
 b64() { printf '%s' "$1" | base64 -w0; }
 # The pull token is a classic token of the schryer account, which can read Sustenaut's packages.
 pull=$(printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$(b64 "schryer:$OPPORTUNITY_GHCR_PULL_TOKEN")")
@@ -70,5 +74,5 @@ metadata:
 data:
   .dockerconfigjson: $(b64 "$pull")
 ---
-$(cat "$root/opportunity-site/k8s/admin/network-policy.yaml")
+$(cat "$root/k8s/admin/network-policy.yaml")
 YAML
