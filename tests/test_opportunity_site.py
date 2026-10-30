@@ -401,3 +401,15 @@ def test_postgres_store():
     assert s.tally() == {"OPP-10": (0, 1)} and s.reviews("OPP-10")[0].label == "Not convinced"
     with pytest.raises(psycopg.errors.CheckViolation):
         s.add_review("OPP-10", "maybe", "", "abc", ME)
+
+
+def test_the_storage_token_is_read_from_its_file_on_each_upload(tmp_path):
+    """The kubelet renews the projected token's file, so each upload reads it afresh."""
+    from opportunity import files
+
+    token_file = tmp_path / "token"
+    token_file.write_text("first\n")
+    token = files.pod_token(str(token_file))
+    assert token() == "first"
+    token_file.write_text("second")
+    assert token() == "second"

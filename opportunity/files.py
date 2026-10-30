@@ -11,8 +11,11 @@ The storage API (Sustenaut/storage, "general files and kept client documents"):
 A file's id is the SHA-256 of its content, so a new version of a document is
 a new file; its ``label`` ("OPP-02 market report v3") says which version it
 is. A document that went to a client is uploaded ``kept`` and is never
-cleaned up. The site uploads with its GitHub App's installation token and
-names the person in ``for``.
+cleaned up. The site uploads with its pod's service-account token for the
+audience storage.sustenaut.eu (the principal ``k8s:opportunity/app``, which
+the tenant's ``write`` list names), read from its file on each upload, and
+names the person in ``for``. (A GitHub App installation token can't upload:
+storage can't tell that it may write.)
 
 TODO(storage): not switched on yet. Storage has no listing, so the site must
 record each upload (subject, id, name, label, kept, who) in its own database
@@ -51,7 +54,7 @@ class Files(Protocol):
 
 
 class StorageClient:
-    """storage.sustenaut.eu, tenant ``opportunity``, with the GitHub App's installation token."""
+    """storage.sustenaut.eu, tenant ``opportunity``, with a bearer token from ``token()`` (pod_token)."""
 
     def __init__(self, token: Callable[[], str], base_url: str = BASE, tenant: str = TENANT):
         self.token, self.base_url, self.tenant = token, base_url.rstrip("/"), tenant
@@ -91,5 +94,15 @@ class FakeFiles:
         return [f for (s, _, _), (f, _) in self.files.items() if s == subject]
 
 
+def pod_token(path: str | None = None) -> Callable[[], str]:
+    """Reads the projected service-account token afresh on each call: the
+    kubelet renews the file before the token expires. Never logged or kept."""
+    import os
+    from pathlib import Path
+
+    file = Path(path or os.environ.get("OPPORTUNITY_STORAGE_TOKEN_FILE", "/var/run/secrets/storage.sustenaut.eu/token"))
+    return lambda: file.read_text().strip()
+
+
 def from_env() -> Files | None:
-    return None  # TODO(storage): StorageClient(app token) once the steps in the module docstring are done
+    return None  # TODO(storage): StorageClient(pod_token()) once the steps in the module docstring are done

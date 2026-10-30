@@ -28,6 +28,8 @@ spec:
       labels:
         app: opportunity
     spec:
+      serviceAccountName: app # service-accounts.yaml: no RBAC, no API token
+      automountServiceAccountToken: false
       imagePullSecrets:
         - name: ghcr-pull # the image holds bizplan/, so it stays private
       securityContext:
@@ -78,6 +80,9 @@ spec:
                   key: github-installation-id
             - name: OPPORTUNITY_REPO_DIR
               value: /data/business-plan
+            # The file, not the token: storage.py reads it on each upload.
+            - name: OPPORTUNITY_STORAGE_TOKEN_FILE
+              value: /var/run/secrets/storage.sustenaut.eu/token
           readinessProbe:
             httpGet:
               path: /healthz
@@ -92,6 +97,18 @@ spec:
           volumeMounts:
             - name: checkout
               mountPath: /data
+            - name: storage-token
+              mountPath: /var/run/secrets/storage.sustenaut.eu
+              readOnly: true
       volumes:
         - name: checkout
           emptyDir: {}
+        # A token for storage.sustenaut.eu only (it is no use against the
+        # Kubernetes API), renewed by the kubelet before its 10 minutes run out.
+        - name: storage-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: storage.sustenaut.eu
+                  expirationSeconds: 600
+                  path: token
