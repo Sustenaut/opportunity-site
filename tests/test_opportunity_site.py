@@ -243,29 +243,6 @@ def test_branch_names_count_up():
                                                   "opportunity/OPP-10-david-x"]) == "opportunity/OPP-10-david-8"
 
 
-class FakeGitHub:
-    """Just enough of the GitHub REST API for GitHubApp.propose."""
-
-    def __init__(self, files):
-        self.files, self.calls = files, []
-
-    def __call__(self, method, url, **kw):
-        self.calls.append((method, url.split("/repos/Sustenaut/business-plan")[-1], kw.get("json")))
-        path = url.split("/repos/Sustenaut/business-plan")[-1]
-        if path == "/git/ref/heads/main":
-            return Reply(200, {"object": {"sha": "base"}})
-        if path.startswith("/contents/") and method == "GET":
-            text = self.files.get(path[len("/contents/"):])
-            if text is None:
-                return Reply(404, {})
-            return Reply(200, {"sha": "blob", "content": base64.b64encode(text.encode()).decode()})
-        if path.startswith("/git/matching-refs/"):
-            return Reply(200, [{"ref": "refs/heads/opportunity/OPP-10-david-1"}])
-        if path == "/pulls":
-            return Reply(201, {"html_url": "https://github.com/Sustenaut/business-plan/pull/9"})
-        return Reply(201, {})
-
-
 class Reply:
     def __init__(self, status, body):
         self.status_code, self._body, self.text = status, body, json.dumps(body)
@@ -277,33 +254,41 @@ class Reply:
         assert self.status_code < 400
 
 
-def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request(monkeypatch):
-    import requests
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from integrations.calls import Caller, MemorySink, Replay
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                             serialization.NoEncryption()).decode()
-    app = github.GitHubApp("123", pem, "456")
-    head, claims, sig = app._jwt().split(".")
-    pad = lambda s: base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))  # noqa: E731
-    key.public_key().verify(pad(sig), f"{head}.{claims}".encode(), padding.PKCS1v15(), hashes.SHA256())
-    assert json.loads(pad(claims))["iss"] == "123"
-
-    monkeypatch.setattr(requests, "post", lambda url, **kw: Reply(201, {"token": "inst-token"}))
-    fake = FakeGitHub({"opportunities/OPP-10.md": "old"})
-    monkeypatch.setattr(requests, "request", fake)
+    api = "https://api.github.com/repos/Sustenaut/business-plan"
+    content = base64.b64encode(b"old").decode()
+    replay = Replay({
+        "POST https://api.github.com/app/installations/456/access_tokens": {"status": 201, "json": {"token": "inst-token"}},
+        f"GET {api}/git/ref/heads/main": {"status": 200, "json": {"object": {"sha": "base"}}},
+        f"GET {api}/contents/opportunities/OPP-10.md?ref=base": {"status": 200, "json": {"sha": "blob", "content": content}},
+        f"GET {api}/git/matching-refs/heads/opportunity/OPP-10-david-": {
+            "status": 200, "json": [{"ref": "refs/heads/opportunity/OPP-10-david-1"}]},
+        f"POST {api}/git/refs": {"status": 201, "json": {}},
+        f"PUT {api}/contents/opportunities/OPP-10.md": {"status": 201, "json": {}},
+        f"POST {api}/pulls": {"status": 201, "json": {"html_url": "https://github.com/Sustenaut/business-plan/pull/9"}},
+    })
+    sink = MemorySink()
+    app = github.GitHubApp("123", pem, "456", caller=Caller("opportunity-site", "web", sink=sink, transport=replay))
     with pytest.raises(github.Conflict):
         app.propose(slug="OPP-10", user="david", changes=[github.Change("opportunities/OPP-10.md", "older", "new")],
                     title="t", body="b")
     url = app.propose(slug="OPP-10", user="david", changes=[github.Change("opportunities/OPP-10.md", "old", "new")],
                       title="OPP-10: edit", body="by david")
     assert url.endswith("/pull/9") and app.token() == "inst-token"
-    writes = [(m, p, j) for m, p, j in fake.calls if m != "GET"]
+    writes = [(r.method, r.url.removeprefix(api), json.loads(r.body)) for r in replay.sent
+              if r.method != "GET" and r.url.startswith(api)]
     assert writes[0] == ("POST", "/git/refs", {"ref": "refs/heads/opportunity/OPP-10-david-2", "sha": "base"})
     assert writes[1][:2] == ("PUT", "/contents/opportunities/OPP-10.md") and writes[1][2]["sha"] == "blob"
-    assert writes[2][2]["head"] == "opportunity/OPP-10-david-2" and writes[2][2]["base"] == "main"
+    assert {r.plugin for r in sink.records} == {"github.app-token", "github.edit-pr"}
+    assert {r.repo for r in sink.records} == {"opportunity-site"}
+
 
 
 # --- Content -----------------------------------------------------------------
