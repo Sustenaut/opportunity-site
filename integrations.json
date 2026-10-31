@@ -5,7 +5,8 @@
       "paths": [
         "with-secrets",
         "with-secrets.json"
-      ]
+      ],
+      "mode": "required"
     },
     {
       "plugin": "github.app-token",
@@ -13,13 +14,15 @@
         "k8s/app.yaml",
         "opportunity/github.py",
         "push-secrets.sh"
-      ]
+      ],
+      "mode": "required"
     },
     {
       "plugin": "github.edit-pr",
       "paths": [
         "opportunity/github.py"
-      ]
+      ],
+      "mode": "required"
     },
     {
       "plugin": "github.ghcr",
@@ -27,25 +30,29 @@
         ".github/workflows/deploy.yml",
         "k8s/app.yaml",
         "k8s/kustomization.yaml"
-      ]
+      ],
+      "mode": "required"
     },
     {
       "plugin": "google.cloud",
       "paths": [
         "k8s/backup.yaml"
-      ]
+      ],
+      "mode": "required"
     },
     {
       "plugin": "letsencrypt.certs",
       "paths": [
         "k8s/ingress.yaml"
-      ]
+      ],
+      "mode": "required"
     },
     {
       "plugin": "tailscale.tailnet",
       "paths": [
         ".github/workflows/deploy.yml"
-      ]
+      ],
+      "mode": "required"
     }
   ],
   "own_hosts": [
