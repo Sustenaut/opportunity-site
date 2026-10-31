@@ -1,0 +1,66 @@
+{
+  "uses": [
+    {
+      "plugin": "bitwarden.secrets",
+      "paths": [
+        "with-secrets",
+        "with-secrets.json"
+      ]
+    },
+    {
+      "plugin": "github.app-token",
+      "paths": [
+        "k8s/app.yaml",
+        "opportunity/github.py",
+        "push-secrets.sh"
+      ]
+    },
+    {
+      "plugin": "github.edit-pr",
+      "paths": [
+        "opportunity/github.py"
+      ]
+    },
+    {
+      "plugin": "github.ghcr",
+      "paths": [
+        ".github/workflows/deploy.yml",
+        "k8s/app.yaml",
+        "k8s/kustomization.yaml"
+      ]
+    },
+    {
+      "plugin": "google.cloud",
+      "paths": [
+        "k8s/backup.yaml"
+      ]
+    },
+    {
+      "plugin": "letsencrypt.certs",
+      "paths": [
+        "k8s/ingress.yaml"
+      ]
+    },
+    {
+      "plugin": "tailscale.tailnet",
+      "paths": [
+        ".github/workflows/deploy.yml"
+      ]
+    }
+  ],
+  "own_hosts": [
+    "sustenaut.eu"
+  ],
+  "other_secrets": [
+    {
+      "name": "SUSTENAUT_DEPLOY_SSH_KEY",
+      "reason": "An SSH key to our own server"
+    }
+  ],
+  "exclude": [
+    {
+      "path": "tests/**",
+      "reason": "Fakes and test data"
+    }
+  ]
+}
