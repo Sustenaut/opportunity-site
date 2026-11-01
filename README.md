@@ -78,7 +78,7 @@ cluster.
 
 ## Hosting
 
-On the Sustenaut k3s server (business-plan's `infra/hetzner.tf`), namespace `opportunity`,
+On the Sustenaut k3s server (shared-infra's `infra/hetzner.tf`), namespace `opportunity`,
 like auth (Sustenaut/auth):
 
 | Piece | Where |
@@ -87,8 +87,8 @@ like auth (Sustenaut/auth):
 | PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
 | oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` and `/storage-in-use.json` are open without sign-in. |
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
-| Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in business-plan's `pubkit.json`. |
-| Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (business-plan's `infra/opportunity.tf`, kept 30 days). |
+| Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubkit.json`. |
+| Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (shared-infra's `infra/opportunity.tf`, kept 30 days). |
 | Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
 | Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like Sustenaut/auth's `auth.yml`. |
 
@@ -101,7 +101,7 @@ This needs Sustenaut/auth's access-state endpoint deployed, with its key (`push-
 ### Going live
 
 How the site went live, in order; the same steps stand up a new server. Terraform runs in a
-business-plan checkout beside this one (`BUSINESS_PLAN` names another path), with its `./with-secrets`. Steps 1 to 7 of Sustenaut/auth's `README.md`,
+shared-infra checkout beside this one (`SHARED_INFRA` names another path), with its `./with-secrets`. Steps 1 to 7 of Sustenaut/auth's `README.md`,
 "Deploying", are done first (the server, the tailnet, the deploy secrets).
 
 1. **GitHub App** (owned by the Sustenaut org) on Sustenaut/business-plan: Repository permissions *Contents: Read
@@ -127,7 +127,7 @@ business-plan checkout beside this one (`BUSINESS_PLAN` names another path), wit
    opportunity`; then `./with-secrets ./push-secrets.sh`.
 6. **Register the sign-in client**: `./register-client.sh`. Sign in at
    the link it prints as the registrant and confirm. It writes the approval record into
-   business-plan's `infra/auth-approvals.json`: commit that (a PR there), merge,
+   shared-infra's `infra/auth-approvals.json`: commit that (a PR there), merge,
    `./with-secrets terraform -chdir=infra apply`, and run `register-client.sh` again
    (sign in again). Once auth.sustenaut.eu sees the record (DNSSEC-validated, so the
    sustenaut.eu DNSSEC move must be live), the client is issued and put in the Secret

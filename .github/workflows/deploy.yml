@@ -2,7 +2,7 @@
 # to main, or by hand. The image goes to GitHub's container registry and holds
 # no cards and no bizplan: the site reads both from its checkout of
 # business-plan. Then the manifests in k8s/, rendered with that image, go to the
-# Sustenaut k3s server (business-plan's infra/hetzner.tf) over SSH, where the
+# Sustenaut k3s server (shared-infra's infra/hetzner.tf) over SSH, where the
 # deploy key can only run sustenaut-deploy: apply in namespace opportunity and
 # wait. SSH is reachable over Sustenaut's tailnet only, so the job joins it
 # first, as tag:ci.
