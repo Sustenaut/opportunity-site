@@ -222,7 +222,7 @@ def resolve(cid: int, who: auth.Person = Depends(auth.person)):
     if not root or root.parent_id is not None:
         raise HTTPException(404, "No such thread")
     if not who.may_resolve(root.author_email):
-        raise HTTPException(403, "Only the thread's author or the owner can resolve it")
+        raise HTTPException(403, "Only the thread's author or a controller can resolve it")
     _, here, _ = _resolve_subject(root.card_or_report)
     s.store.resolve(cid, who.email)
     return RedirectResponse(f"{here}#c{cid}", status_code=303)

@@ -3,7 +3,7 @@
 # server: the Secret opportunity-secrets and the
 # network policy (k8s/admin/), all in namespace opportunity. Run it from the
 # repository root through with-secrets, after the first terraform apply, whenever
-# a secret changes, and whenever var.team changes:
+# a secret changes:
 #
 #   ./with-secrets ./push-secrets.sh
 #
@@ -13,7 +13,8 @@
 #   opportunity-github-app-id               the GitHub App that opens pull requests
 #   opportunity-github-app-key              its private key (PEM)
 #   opportunity-github-installation-id      its installation on Sustenaut/business-plan
-# From Terraform: the team (var.team), the owner, and the backup key.
+# From Terraform: the backup key. Who may sign in is not here: the team access page
+# at auth.sustenaut.eu/realms/team/access is the one list.
 # Not here: the sign-in client oauth2-proxy uses (the Secret opportunity-oidc), which
 # register-client.sh registers with auth.sustenaut.eu and puts in on the server.
 # They travel to the server inside the SSH connection, never on a command line.
@@ -22,7 +23,7 @@
 set -euo pipefail
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 # Terraform outputs come from business-plan's infra/ (the server, the backup
-# key, var.team): a checkout of it beside this one, or BUSINESS_PLAN=its path.
+# key): a checkout of it beside this one, or BUSINESS_PLAN=its path.
 infra="${BUSINESS_PLAN:-$root/../business-plan}/infra"
 [ -d "$infra" ] || { echo "no business-plan checkout at ${infra%/infra}: clone it beside this repository or set BUSINESS_PLAN" >&2; exit 1; }
 
@@ -36,10 +37,6 @@ done
 
 # SSH reaches the server over Sustenaut's tailnet only (be signed in to it).
 server=$(terraform -chdir="$infra" output -json sustenaut_server | jq -r .ssh_host)
-site=$(terraform -chdir="$infra" output -json opportunity)
-team=$(jq -r '.team | join(",")' <<<"$site")
-team_emails=$(jq -r '.team[]' <<<"$site")
-owner=$(jq -r .owner <<<"$site")
 backup_key=$(terraform -chdir="$infra" output -raw opportunity_backup_key) # already base64
 b64() { printf '%s' "$1" | base64 -w0; }
 
@@ -57,9 +54,6 @@ data:
   github-app-id: $(b64 "$OPPORTUNITY_GITHUB_APP_ID")
   github-app-key: $(b64 "$OPPORTUNITY_GITHUB_APP_KEY")
   github-installation-id: $(b64 "$OPPORTUNITY_GITHUB_INSTALLATION_ID")
-  team: $(b64 "$team")
-  team-emails: $(b64 "$team_emails")
-  owner: $(b64 "$owner")
   backup-gcs-key: $backup_key
 ---
 $(cat "$root/k8s/admin/network-policy.yaml")

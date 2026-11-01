@@ -43,16 +43,17 @@ spec:
           env:
             - name: OPPORTUNITY_LOGIN
               value: proxy
-            - name: TEAM # Terraform's var.team, the list review and plan use
+            # The sign-in client, to read the access state's hash (opportunity/access_check.py).
+            - name: OPPORTUNITY_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: opportunity-secrets
-                  key: team
-            - name: OPPORTUNITY_OWNER
+                  name: opportunity-oidc
+                  key: client-id
+            - name: OPPORTUNITY_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: opportunity-secrets
-                  key: owner
+                  name: opportunity-oidc
+                  key: client-secret
             # libpq reads the password from PGPASSWORD, so it never sits in a URL.
             - name: OPPORTUNITY_DATABASE_URL
               value: host=postgres dbname=opportunity user=opportunity

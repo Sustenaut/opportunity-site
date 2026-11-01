@@ -18,9 +18,9 @@ ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "tests" / "fixtures" / "business-plan"
 sys.path.insert(0, str(ROOT))
 
-from opportunity import auth, cardformat, content, edits, files, github, main, store  # noqa: E402
+from opportunity import access_check, auth, cardformat, content, edits, files, github, main, store  # noqa: E402
 
-ME, OWNER, OTHER = "reviewer@example.org", "owner@example.org", "other@example.org"
+ME, CONTROLLER, OTHER = "reviewer@example.org", "owner@example.org", "other@example.org"
 ORIGIN = {"origin": "http://testserver"}
 
 
@@ -68,14 +68,16 @@ def site(repo, monkeypatch):
     monkeypatch.setattr(main.Services, "files", None)
     monkeypatch.setattr(main.Services, "_made", True)
     monkeypatch.setenv("OPPORTUNITY_DEV_USER", ME)
-    monkeypatch.setenv("OPPORTUNITY_OWNER", OWNER)
+    monkeypatch.delenv("OPPORTUNITY_DEV_GROUPS", raising=False)
+    monkeypatch.setattr(auth, "_access", None)
     for v in ("K_SERVICE", "KUBERNETES_SERVICE_HOST"):
         monkeypatch.delenv(v, raising=False)
     return TestClient(main.app), s, pub, repo
 
 
-def as_user(monkeypatch, email):
+def as_user(monkeypatch, email, groups="opportunity"):
     monkeypatch.setenv("OPPORTUNITY_DEV_USER", email)
+    monkeypatch.setenv("OPPORTUNITY_DEV_GROUPS", groups)
 
 
 # --- Reading -----------------------------------------------------------------
@@ -131,9 +133,10 @@ def test_comment_on_a_field_reply_and_resolve(site, monkeypatch):
     assert client.post("/comments/1/resolve", headers=ORIGIN).status_code == 403  # not the author
     assert client.post("/comments/2/resolve", headers=ORIGIN).status_code == 404  # a reply isn't a thread
 
-    as_user(monkeypatch, OWNER)  # the owner may resolve any thread
+    as_user(monkeypatch, CONTROLLER, "controller,opportunity")  # a controller may resolve any thread
+    assert "· controller" in client.get("/c/OPP-10").text
     assert client.post("/comments/1/resolve", headers=ORIGIN, follow_redirects=False).status_code == 303
-    assert s.comment(1).resolved_by == OWNER
+    assert s.comment(1).resolved_by == CONTROLLER
     assert main.Services.store.tally().get("OPP-10") is None
 
 
@@ -348,17 +351,78 @@ def test_without_a_format_the_site_says_so(repo, tmp_path, monkeypatch):
 
 # --- Login -------------------------------------------------------------------
 
-def test_the_proxy_login_takes_the_email_header_for_team_members_only(site, monkeypatch):
+class FakeKeycloak(access_check.AccessCheck):
+    """The check as it runs, with Keycloak's two answers made up here."""
+
+    def __init__(self):
+        super().__init__("https://auth.example/realms/team", "sustenaut.eu", "secret", role="opportunity", hash_ttl=0)
+        self.hash, self.roles, self.up, self.userinfo_calls = "one", {}, True, 0
+
+    def _get(self, url, headers):
+        if not self.up:
+            return 0, {}
+        if url.endswith("/access-state"):
+            return 200, {"hash": self.hash}
+        self.userinfo_calls += 1
+        token = headers["Authorization"].removeprefix("Bearer ")
+        return (200, {"access": self.roles[token]}) if token in self.roles else (401, {})
+
+
+def test_the_proxy_login_asks_on_each_request(site, monkeypatch):
     client, *_ = site
     monkeypatch.delenv("OPPORTUNITY_DEV_USER")
-    monkeypatch.setenv("TEAM", f"{ME}, {OWNER}")
+    keycloak = FakeKeycloak()
+    keycloak.roles = {"me": ["opportunity"], "boss": ["controller", "opportunity"], "other": ["release"]}
+    monkeypatch.setattr(auth, "_access", keycloak)
+
+    def get(email, token=None, **kw):
+        return client.get("/", headers={"x-forwarded-email": email, **({"x-forwarded-access-token": token} if token else {})},
+                          follow_redirects=False, **kw)
+
+    def post(email, token):
+        return client.post("/comments/999/resolve", follow_redirects=False,
+                           headers={**ORIGIN, "x-forwarded-email": email, "x-forwarded-access-token": token})
+
     assert client.get("/").status_code == 401
-    assert client.get("/", headers={"x-forwarded-email": OTHER}).status_code == 403
-    assert client.get("/", headers={"x-forwarded-email": ME.upper()}).status_code == 200
-    # oauth2-proxy passes this one through as the browser sent it: never trusted.
-    assert client.get("/", headers={"x-auth-request-email": ME}).status_code == 401
+    assert get(OTHER, "other").status_code == 403  # another service's role
+    page = get(ME.upper(), "me")
+    assert page.status_code == 200 and "· controller" not in page.text
+    assert "· controller" in get(CONTROLLER, "boss").text
+    assert client.get("/", headers={"x-auth-request-email": ME}).status_code == 401  # passed through by the proxy: never trusted
+    # A forged header changes nothing: roles come from userinfo, not from the browser.
+    assert "· controller" not in client.get("/", headers={"x-forwarded-email": ME, "x-forwarded-access-token": "me",
+                                                          "x-forwarded-groups": "controller,opportunity"}).text
+
+    calls = keycloak.userinfo_calls
+    assert get(ME, "me").status_code == 200 and keycloak.userinfo_calls == calls  # nothing changed: no full check
+
+    keycloak.roles["me"], keycloak.hash = ["plan"], "two"  # the role taken away
+    assert get(ME, "me").status_code == 403 and keycloak.userinfo_calls == calls + 1
+    keycloak.roles["me"], keycloak.hash = ["opportunity"], "three"
+    assert get(ME, "me").status_code == 200
+
+    keycloak.up = False  # auth.sustenaut.eu can't be reached: reading goes on, changes don't
+    assert get(ME, "me").status_code == 200
+    assert post(ME, "me").status_code == 503
+    assert get(OTHER, "new").status_code == 503  # nobody to vouch for them
+    keycloak.up = True
+
+    del keycloak.roles["me"]  # removed from all: the session has ended
+    keycloak.hash = "four"
+    gone = get(ME, "me")
+    assert gone.status_code == 303 and gone.headers["location"] == "/oauth2/start?rd=/"
+    assert post(ME, "me").status_code == 401
+
     monkeypatch.setenv("OPPORTUNITY_LOGIN", "wallet")  # not built yet: fails closed
-    assert client.get("/", headers={"x-forwarded-email": ME}).status_code == 500
+    assert get(ME, "me").status_code == 500
+
+
+def test_the_proxy_login_fails_closed_without_the_client(site, monkeypatch):
+    client, *_ = site
+    monkeypatch.delenv("OPPORTUNITY_DEV_USER")
+    for name in ("OPPORTUNITY_CLIENT_ID", "OPPORTUNITY_CLIENT_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    assert client.get("/", headers={"x-forwarded-email": ME, "x-forwarded-access-token": "me"}).status_code == 500
 
 
 def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
@@ -407,13 +471,13 @@ def test_postgres_store():
     s = store.PostgresStore(url)
     assert s.migrate() == ["001_comments_and_reviews.sql"] and s.migrate() == []
     root = s.add_comment("OPP-10", "f:kill_point", "abc", ME, "Why?")
-    reply = s.add_comment("OPP-10", "", "abc", OWNER, "Because.", root.id)
+    reply = s.add_comment("OPP-10", "", "abc", CONTROLLER, "Because.", root.id)
     assert [c.id for c in s.comments("OPP-10")] == [root.id, reply.id] and s.comment(reply.id).parent_id == root.id
     s.add_review("OPP-10", "not-convinced", "", "abc", ME)
     assert s.tally() == {"OPP-10": (1, 1)}
-    s.resolve(reply.id, OWNER)  # only a thread's first comment is resolved
-    s.resolve(root.id, OWNER)
-    assert s.comment(root.id).resolved_by == OWNER and s.comment(reply.id).resolved_by is None
+    s.resolve(reply.id, CONTROLLER)  # only a thread's first comment is resolved
+    s.resolve(root.id, CONTROLLER)
+    assert s.comment(root.id).resolved_by == CONTROLLER and s.comment(reply.id).resolved_by is None
     assert s.tally() == {"OPP-10": (0, 1)} and s.reviews("OPP-10")[0].label == "Not convinced"
     with pytest.raises(psycopg.errors.CheckViolation):
         s.add_review("OPP-10", "maybe", "", "abc", ME)

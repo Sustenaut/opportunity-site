@@ -9,7 +9,7 @@
 <body>
 <header class="top">
   <a class="brand" href="/">Sustenaut opportunities</a>
-  <span class="who">{{ who.email }}{% if who.owner %} · owner{% endif %}{% if who.login == "dev" %} · local{% endif %}</span>
+  <span class="who">{{ who.email }}{% if who.controller %} · controller{% endif %}{% if who.login == "dev" %} · local{% endif %}</span>
 </header>
 <main>
 {% block main %}{% endblock %}

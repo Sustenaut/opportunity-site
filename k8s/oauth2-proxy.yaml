@@ -1,11 +1,12 @@
 # oauth2-proxy signs people in with the team realm at auth.sustenaut.eu (Keycloak:
-# a passkey or an emailed code; accounts only for var.team, made by
-# Sustenaut/auth's invite-team.sh), as the client sustenaut.eu registered for its team
+# a passkey or an emailed code), as the client sustenaut.eu registered for its team
 # sites (register-client.sh puts its id and secret in the Secret opportunity-oidc).
-# As a second check it lets in only the emails in Terraform's var.team, the same list
-# the app checks: push-secrets.sh puts it in the Secret, so there is no second list.
-# It hands the app the account's verified email in X-Forwarded-Email, replacing
-# whatever the browser sent. Open without sign-in: /healthz, and /storage-in-use.json, which
+# It lets in only people with the role opportunity, from the token's access claim (the
+# team access page at auth.sustenaut.eu/realms/team/access is the one list), and refreshes
+# every 4 minutes, which also keeps the access token valid (it lasts 5).
+# It hands the app the account's verified email in X-Forwarded-Email and that token in
+# X-Forwarded-Access-Token, replacing whatever the browser sent; the app asks on each
+# request whether the person's access has changed. Open without sign-in: /healthz, and /storage-in-use.json, which
 # storage.sustenaut.eu's nightly clean-up reads.
 apiVersion: v1
 kind: Service
@@ -47,7 +48,11 @@ spec:
             - --upstream=http://app:8080/
             - --redirect-url=https://opportunity.sustenaut.eu/oauth2/callback
             - --reverse-proxy=true
-            - --authenticated-emails-file=/etc/oauth2-proxy/emails
+            - --email-domain=*
+            - --oidc-groups-claim=access
+            - --allowed-group=opportunity
+            - --pass-access-token=true
+            - --cookie-refresh=4m
             - --pass-user-headers=true
             - --cookie-name=_opportunity
             - --cookie-secure=true
@@ -86,14 +91,3 @@ spec:
               memory: 32Mi
             limits:
               memory: 128Mi
-          volumeMounts:
-            - name: emails
-              mountPath: /etc/oauth2-proxy
-              readOnly: true
-      volumes:
-        - name: emails
-          secret:
-            secretName: opportunity-secrets
-            items:
-              - key: team-emails
-                path: emails

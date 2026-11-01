@@ -37,7 +37,7 @@ server=${SUSTENAUT_SERVER:-$(terraform -chdir="$infra" output -json sustenaut_se
 # The script goes on stdin; its sign-in instructions come back on stderr, its result on stdout.
 # shellcheck disable=SC2029 # the names are this machine's on purpose
 registration="$(ssh "root@$server" "python3 -I - --state-dir $state --auth $auth --domain $domain \
-  --name 'sustenaut.eu team sites' --redirect https://$host/oauth2/callback --logout https://$host/" \
+  --name 'sustenaut.eu team sites' --redirect https://$host/oauth2/callback --logout https://$host/ --role opportunity" \
   < "$register_app" || true)"
 status="$(jq -r .status <<<"$registration" 2>/dev/null || echo error)"
 case "$status" in
