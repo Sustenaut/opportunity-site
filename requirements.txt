@@ -7,5 +7,5 @@ Markdown  # card and report bodies
 PyYAML  # the cards' front matter, which business-plan's bizplan/opportunities.py reads
 pandas  # business-plan's bizplan.opportunities.rows
 psycopg[binary]  # comments and reviews in PostgreSQL
-requests  # the GitHub API
-cryptography  # signs the GitHub App's JWT
+requests  # storage uploads
+integrations[github-app] @ https://github.com/Sustenaut/integrations/releases/download/v0.2.0/integrations-0.2.0-py3-none-any.whl  # the GitHub calls
