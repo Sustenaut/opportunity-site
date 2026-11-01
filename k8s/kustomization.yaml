@@ -1,4 +1,4 @@
-# The opportunity site on the Sustenaut k3s server (business-plan's infra/hetzner.tf), namespace
+# The opportunity site on the Sustenaut k3s server (shared-infra's infra/hetzner.tf), namespace
 # opportunity: the app, its own PostgreSQL, oauth2-proxy in front of it, the
 # ingress for opportunity.sustenaut.eu and a nightly database dump.
 # Rendered by .github/workflows/deploy.yml with the image it just built

@@ -21,10 +21,10 @@
 #   ssh root@sustenaut k3s kubectl -n opportunity rollout restart deployment/app deployment/oauth2-proxy
 set -euo pipefail
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-# Terraform outputs come from business-plan's infra/ (the server, the backup
-# key, var.team): a checkout of it beside this one, or BUSINESS_PLAN=its path.
-infra="${BUSINESS_PLAN:-$root/../business-plan}/infra"
-[ -d "$infra" ] || { echo "no business-plan checkout at ${infra%/infra}: clone it beside this repository or set BUSINESS_PLAN" >&2; exit 1; }
+# Terraform outputs come from shared-infra's infra/ (the server, the backup
+# key, var.team): a checkout of it beside this one, or SHARED_INFRA=its path.
+infra="${SHARED_INFRA:-$root/../shared-infra}/infra"
+[ -d "$infra" ] || { echo "no shared-infra checkout at ${infra%/infra}: clone it beside this repository or set SHARED_INFRA" >&2; exit 1; }
 
 for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GITHUB_APP_ID \
   OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID; do
