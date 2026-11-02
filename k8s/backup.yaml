@@ -32,10 +32,14 @@ spec:
           initContainers:
             - name: dump
               image: docker.io/library/postgres:16.14
+              # A new pod can be refused for its first moments, while k3s adds it to the
+              # network policy that lets it reach the database: wait for that, up to a minute.
               command:
                 - sh
                 - -c
-                - pg_dump -h postgres -U opportunity -d opportunity -Fc -f "/dump/opportunity-$(date -u +%Y%m%dT%H%M%SZ).dump"
+                - >-
+                  for try in $(seq 1 30); do pg_isready -q -h postgres -t 2 && break; sleep 2; done;
+                  pg_dump -h postgres -U opportunity -d opportunity -Fc -f "/dump/opportunity-$(date -u +%Y%m%dT%H%M%SZ).dump"
               env:
                 - name: PGPASSWORD
                   valueFrom:
