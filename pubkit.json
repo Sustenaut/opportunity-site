@@ -4,7 +4,8 @@
     "with": {
       "setup": "python -m venv .venv && .venv/bin/pip install --quiet -r requirements.lock",
       "test": ".venv/bin/python -m pytest -q",
-      "shellcheck": "with-secrets *.sh"
+      "shellcheck": "with-secrets *.sh",
+      "terraform-dir": "infra"
     }
   },
   "protect": {
@@ -13,5 +14,17 @@
       "integrations / scan"
     ],
     "tags": false
+  },
+  "hosting": {
+    "providers": {
+      "google-cloud": {
+        "type": "google-cloud",
+        "project": "sustenaut",
+        "region": "europe-north1",
+        "cloud_run": {
+          "domain_target": "ghs.googlehosted.com."
+        }
+      }
+    }
   }
 }

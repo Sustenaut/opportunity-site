@@ -69,5 +69,17 @@
       "path": "tests/**",
       "reason": "Fakes and test data"
     }
+  ],
+  "terraform": [
+    {
+      "dir": "infra",
+      "plugins": [
+        "terraform.google"
+      ],
+      "runs": [
+        "laptop"
+      ],
+      "mode": "required"
+    }
   ]
 }

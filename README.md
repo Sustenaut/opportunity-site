@@ -88,7 +88,7 @@ like auth (Sustenaut/auth):
 | oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` and `/storage-in-use.json` are open without sign-in. |
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
 | Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubkit.json`. |
-| Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (shared-infra's `infra/opportunity.tf`, kept 30 days). |
+| Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (`infra/main.tf`, kept 30 days). |
 | Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
 | Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like Sustenaut/auth's `auth.yml`. |
 
@@ -115,8 +115,10 @@ shared-infra checkout beside this one (`SHARED_INFRA` names another path), with 
    client secret: step 6 registers it. For the team realm's email: the alias
    `noreply@sustenaut.eu` on the mailbox.org account whose app password is already
    `auth-smtp-password`.
-3. `./with-secrets terraform -chdir=infra apply`: the backup bucket, its account and
-   key, the DNS record for opportunity.sustenaut.eu, and the `auth_team` output.
+3. `./with-secrets terraform -chdir=infra apply` here: the backup bucket and its account.
+   In shared-infra, the same: the DNS record for opportunity.sustenaut.eu, and the
+   `auth_team` output. Then the account's key, with your Bitwarden write token:
+   `./pubkit service-account-key create --account=sustenaut-opportunity-backup@sustenaut.iam.gserviceaccount.com --secret=opportunity-backup-gcs-key`.
 4. **The team realm**: run the `auth` workflow (or merge), so the realm job creates
    the realm; then `SUSTENAUT_SERVER=sustenaut ./with-secrets ./invite-team.sh` in a Sustenaut/auth checkout. Everyone in
    `var.team` and the registrant (`var.team_registrant`, default `admin@sustenaut.eu`)
