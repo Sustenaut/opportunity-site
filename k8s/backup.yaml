@@ -1,5 +1,5 @@
 # Nightly dump of the site's database to the Google Cloud Storage bucket
-# sustenaut-opportunity-backups (infra/opportunity.tf: in Finland, kept 30 days,
+# sustenaut-opportunity-backups (infra/main.tf: in Finland, kept 30 days,
 # written by an account that can only create objects). Restore: README.md.
 apiVersion: batch/v1
 kind: CronJob

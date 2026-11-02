@@ -26,6 +26,13 @@ jobs:
     uses: Sustenaut/pubkit/.github/workflows/job-service-checks.yml@7914b2abb933747e303f5f981d8335d3704dcdb3 # v0.21.0
     with: {"shellcheck": "with-secrets *.sh"}
 
+  terraform:
+    name: ci
+    needs: [tested]
+    if: ${{ needs.tested.outputs.tested != 'true' }}
+    uses: Sustenaut/pubkit/.github/workflows/job-service-terraform.yml@7914b2abb933747e303f5f981d8335d3704dcdb3 # v0.21.0
+    with: {"terraform-dir": "infra"}
+
   tests:
     name: ci
     needs: [tested]
@@ -39,7 +46,7 @@ jobs:
   passed:
     name: ci / passed
     if: always()
-    needs: [tested, checks, tests]
+    needs: [tested, checks, terraform, tests]
     runs-on: ubuntu-latest
     steps:
       - run: |
