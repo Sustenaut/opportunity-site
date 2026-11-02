@@ -13,7 +13,9 @@
 #   opportunity-github-app-id               the GitHub App that opens pull requests
 #   opportunity-github-app-key              its private key (PEM)
 #   opportunity-github-installation-id      its installation on Sustenaut/business-plan
-# From Terraform: the backup key. Who may sign in is not here: the team access page
+#   opportunity-backup-gcs-key              the backup writer's key, base64-encoded, made by
+#                                           ./pubkit service-account-key create
+# Who may sign in is not here: the team access page
 # at auth.sustenaut.eu/realms/team/access is the one list.
 # Not here: the sign-in client oauth2-proxy uses (the Secret opportunity-oidc), which
 # register-client.sh registers with auth.sustenaut.eu and puts in on the server.
@@ -22,13 +24,13 @@
 #   ssh root@sustenaut k3s kubectl -n opportunity rollout restart deployment/app deployment/oauth2-proxy
 set -euo pipefail
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-# Terraform outputs come from shared-infra's infra/ (the server, the backup
-# key): a checkout of it beside this one, or SHARED_INFRA=its path.
+# The server's name is a Terraform output of shared-infra's infra/: a checkout of it
+# beside this one, or SHARED_INFRA=its path.
 infra="${SHARED_INFRA:-$root/../shared-infra}/infra"
 [ -d "$infra" ] || { echo "no shared-infra checkout at ${infra%/infra}: clone it beside this repository or set SHARED_INFRA" >&2; exit 1; }
 
 for name in OPPORTUNITY_DB_PASSWORD OPPORTUNITY_COOKIE_SECRET OPPORTUNITY_GITHUB_APP_ID \
-  OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID; do
+  OPPORTUNITY_GITHUB_APP_KEY OPPORTUNITY_GITHUB_INSTALLATION_ID OPPORTUNITY_BACKUP_GCS_KEY; do
   if [ -z "${!name:-}" ]; then
     echo "$name is not set: run this through ./with-secrets, and check the secret is in Bitwarden." >&2
     exit 1
@@ -37,7 +39,6 @@ done
 
 # SSH reaches the server over Sustenaut's tailnet only (be signed in to it).
 server=$(terraform -chdir="$infra" output -json sustenaut_server | jq -r .ssh_host)
-backup_key=$(terraform -chdir="$infra" output -raw opportunity_backup_key) # already base64
 b64() { printf '%s' "$1" | base64 -w0; }
 
 # shellcheck disable=SC2087 # expanded here on purpose: the values go in the SSH stream
@@ -54,7 +55,7 @@ data:
   github-app-id: $(b64 "$OPPORTUNITY_GITHUB_APP_ID")
   github-app-key: $(b64 "$OPPORTUNITY_GITHUB_APP_KEY")
   github-installation-id: $(b64 "$OPPORTUNITY_GITHUB_INSTALLATION_ID")
-  backup-gcs-key: $backup_key
+  backup-gcs-key: $OPPORTUNITY_BACKUP_GCS_KEY
 ---
 $(cat "$root/k8s/admin/network-policy.yaml")
 YAML
