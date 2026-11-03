@@ -293,6 +293,24 @@ def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request():
     assert {r.repo for r in sink.records} == {"opportunity-site"}
 
 
+def test_the_call_log_goes_to_storage_only_when_the_deployment_says(monkeypatch, tmp_path):
+    monkeypatch.delenv("OPPORTUNITY_CALL_LOG_URL", raising=False)
+    assert github.call_log() is None
+    token = tmp_path / "token"
+    token.write_text("pod-token\n")
+    monkeypatch.setenv("OPPORTUNITY_CALL_LOG_URL", "https://storage.example")
+    monkeypatch.setenv("OPPORTUNITY_STORAGE_TOKEN_FILE", str(token))
+    monkeypatch.setenv("HOSTNAME", "app-7")
+    import integrations.storage_sink as storage_sink
+    monkeypatch.setattr(storage_sink, "threading", type("T", (), {"Thread": lambda **kw: type("S", (), {"start": lambda s: None})(),
+                                                                  "Lock": __import__("threading").Lock}))
+    monkeypatch.setattr(storage_sink.atexit, "register", lambda f: None)
+    sink = github.call_log()
+    assert isinstance(sink, storage_sink.StorageSink)
+    assert sink.datasets == {"opportunity-site": "calls_opportunity_site"} and sink.sender == "app-7"
+    assert sink.token() == "pod-token" and sink.base == "https://storage.example"
+
+
 
 # --- Content -----------------------------------------------------------------
 
