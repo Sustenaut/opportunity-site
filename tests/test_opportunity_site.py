@@ -246,17 +246,6 @@ def test_branch_names_count_up():
                                                   "opportunity/OPP-10-david-x"]) == "opportunity/OPP-10-david-8"
 
 
-class Reply:
-    def __init__(self, status, body):
-        self.status_code, self._body, self.text = status, body, json.dumps(body)
-
-    def json(self):
-        return self._body
-
-    def raise_for_status(self):
-        assert self.status_code < 400
-
-
 def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -451,7 +440,7 @@ def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
 
 # --- Files -------------------------------------------------------------------
 
-def test_files_wait_for_storage(site, monkeypatch):
+def test_files_wait_for_storage(site):
     client, *_ = site
     assert files.from_env() is None
     assert '<button type="button" disabled>Upload a file</button>' in client.get("/c/OPP-10").text
@@ -461,18 +450,26 @@ def test_files_wait_for_storage(site, monkeypatch):
     v2 = fake.put("OPP-10", "offer.pdf", b"%PDF-2", ME, label="OPP-10 offer v2")
     assert again.kept and sent.id != v2.id and len(fake.list("OPP-10")) == 2
 
-    import requests
+    import email.parser
+
+    from integrations.calls import Response
     seen = {}
 
-    def post(url, **kw):
-        seen.update(url=url, **kw)
-        return Reply(200, {"id": "f" * 64, "name": "offer.pdf", "url": f"/opportunity/f/{'f' * 64}/offer.pdf",
-                           "type": "application/pdf", "size": 6, "label": "v1", "kept": True})
-    monkeypatch.setattr(requests, "post", post)
-    stored = files.StorageClient(lambda: "ghs_token").put("OPP-10", "offer.pdf", b"%PDF-1", ME, label="v1", kept=True)
-    assert seen["url"] == "https://storage.sustenaut.eu/opportunity/files"
-    assert seen["headers"]["Authorization"] == "Bearer ghs_token"
-    assert seen["data"] == {"name": "offer.pdf", "label": "v1", "kept": "true", "for": ME}
+    class Transport:
+        def send(self, request, timeout):
+            seen.update(request=request, timeout=timeout)
+            return Response(200, json.dumps({
+                "id": "f" * 64, "name": "offer.pdf", "url": f"/opportunity/f/{'f' * 64}/offer.pdf",
+                "type": "application/pdf", "size": 6, "label": "v1", "kept": True}).encode())
+    stored = files.StorageClient(lambda: "ghs_token", transport=Transport()).put(
+        "OPP-10", "offer.pdf", b"%PDF-1", ME, label="v1", kept=True)
+    sent = seen["request"]
+    assert sent.method == "POST" and sent.url == "https://storage.sustenaut.eu/opportunity/files"
+    assert sent.headers["Authorization"] == "Bearer ghs_token" and seen["timeout"] == 60
+    form = email.parser.BytesParser().parsebytes(
+        f"Content-Type: {sent.headers['Content-Type']}\r\n\r\n".encode() + sent.body)
+    got = {p.get_param("name", header="content-disposition"): p.get_payload(decode=True) for p in form.get_payload()}
+    assert got == {"name": b"offer.pdf", "label": b"v1", "kept": b"true", "for": ME.encode(), "file": b"%PDF-1"}
     assert stored.url == f"https://storage.sustenaut.eu/opportunity/f/{'f' * 64}/offer.pdf" and stored.kept
 
 

@@ -56,25 +56,43 @@ class Files(Protocol):
 class StorageClient:
     """storage.sustenaut.eu, tenant ``opportunity``, with a bearer token from ``token()`` (pod_token)."""
 
-    def __init__(self, token: Callable[[], str], base_url: str = BASE, tenant: str = TENANT):
+    def __init__(self, token: Callable[[], str], base_url: str = BASE, tenant: str = TENANT, transport=None):
         self.token, self.base_url, self.tenant = token, base_url.rstrip("/"), tenant
+        self.transport = transport  # integrations' Network unless a test passes another
 
     def put(self, subject, name, data, uploaded_by, *, label="", kept=False):
-        import requests
+        from integrations.calls import Network, Request
 
-        r = requests.post(f"{self.base_url}/{self.tenant}/files", timeout=60,
-                          headers={"Authorization": f"Bearer {self.token()}"},
-                          files={"file": (name, data)},
-                          data={"name": name, "label": label, "kept": "true" if kept else "false",
-                                "for": uploaded_by})
-        if r.status_code != 200:
-            raise RuntimeError(f"storage said {r.status_code}: {r.text[:300]}")
+        fields = {"name": name, "label": label, "kept": "true" if kept else "false", "for": uploaded_by}
+        body, content_type = multipart(fields, "file", name, data)
+        r = (self.transport or Network()).send(Request(
+            "POST", f"{self.base_url}/{self.tenant}/files", body=body,
+            headers={"Authorization": f"Bearer {self.token()}", "Content-Type": content_type}), 60)
+        if r.status != 200:
+            raise RuntimeError(f"storage said {r.status or r.error}: {r.body[:300].decode('utf-8', 'replace')}")
         got = r.json()
         return StoredFile(got["id"], subject, got["name"], f"{self.base_url}{got['url']}", got["type"], got["size"],
                           got["label"], got["kept"], uploaded_by)
 
     def list(self, subject):
         raise NotImplementedError("TODO(storage): the site records its uploads itself; storage has no listing")
+
+
+def multipart(fields: dict[str, str], file_field: str, filename: str, data: bytes) -> tuple[bytes, str]:
+    """A multipart/form-data body and its Content-Type, so uploads need no HTTP library of their own."""
+    import uuid
+
+    boundary = uuid.uuid4().hex
+
+    def quoted(s: str) -> str:
+        return s.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", "")
+
+    parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{quoted(k)}"\r\n\r\n{v}\r\n'.encode()
+             for k, v in fields.items()]
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{quoted(file_field)}"; '
+                 f'filename="{quoted(filename)}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()
+                 + data + b"\r\n")
+    return b"".join(parts) + f"--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
 
 
 class FakeFiles:
