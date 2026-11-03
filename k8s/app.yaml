@@ -79,6 +79,9 @@ spec:
                   key: github-installation-id
             - name: OPPORTUNITY_REPO_DIR
               value: /data/business-plan
+            # Its GitHub calls' records, as files in its buffer there.
+            - name: OPPORTUNITY_CALL_LOG_URL
+              value: https://storage.sustenaut.eu
             # The file, not the token: storage.py reads it on each upload.
             - name: OPPORTUNITY_STORAGE_TOKEN_FILE
               value: /var/run/secrets/storage.sustenaut.eu/token

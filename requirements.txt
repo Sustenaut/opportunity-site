@@ -8,4 +8,4 @@ PyYAML  # the cards' front matter, which business-plan's bizplan/opportunities.p
 pandas  # business-plan's bizplan.opportunities.rows
 psycopg[binary]  # comments and reviews in PostgreSQL
 requests  # storage uploads
-integrations[github-app] @ https://github.com/Sustenaut/integrations/releases/download/v0.2.0/integrations-0.2.0-py3-none-any.whl  # the GitHub calls
+integrations[github-app,storage-sink] @ https://github.com/Sustenaut/integrations/releases/download/v0.12.1/integrations-0.12.1-py3-none-any.whl  # the GitHub calls, and their call log

@@ -10,6 +10,9 @@ integrations library's github.app-token and github.edit-pr clients, which make
 and record every call. The same token lets git pull the private repository
 (content.py). Locally, ``LocalPublisher`` writes the would-be pull request under
 build/ instead; tests use a fake.
+
+With OPPORTUNITY_CALL_LOG_URL set, those calls' records go to this site's buffer in
+the storage service, a file every two minutes, as the pod's own storage identity.
 """
 from __future__ import annotations
 
@@ -17,13 +20,16 @@ import os
 from pathlib import Path
 from typing import Protocol
 
-from integrations.calls import Caller
+from integrations.calls import Caller, Network, Sink
 from integrations.clients.github_app_token import AppToken
 from integrations.clients.github_edit_pr import Change, Conflict, EditPullRequests, next_branch
 
 __all__ = ["Change", "Conflict", "GitHubApp", "LocalPublisher", "Publisher", "branch_name", "from_env"]
 
 REPO = "Sustenaut/business-plan"
+# Records are named by app, and this one's go to its own dataset.
+APP = "opportunity-site"
+DATASET = "calls_opportunity_site"
 
 
 class Publisher(Protocol):
@@ -44,7 +50,7 @@ def branch_name(slug: str, user: str, taken: list[str]) -> str:
 class GitHubApp:
     def __init__(self, app_id: str, private_key: str, installation_id: str, repo: str = REPO, base: str = "main",
                  caller: Caller | None = None):
-        caller = caller or Caller("opportunity-site", "web")
+        caller = caller or Caller(APP, "web")
         self.token = AppToken(caller, app_id, private_key, installation_id)
         self.pulls = EditPullRequests(caller, self.token, repo, base)
 
@@ -69,12 +75,24 @@ class LocalPublisher:
         return out.resolve().as_uri()
 
 
+def call_log() -> Sink | None:
+    """Where the site's call records go: its buffer in storage, when the deployment says so."""
+    url = os.environ.get("OPPORTUNITY_CALL_LOG_URL")
+    if not url:
+        return None
+    from integrations.storage_sink import StorageSink
+
+    token = Path(os.environ.get("OPPORTUNITY_STORAGE_TOKEN_FILE", "/var/run/secrets/storage.sustenaut.eu/token"))
+    return StorageSink({APP: DATASET}, transport=Network(), token=lambda: token.read_text(encoding="utf-8").strip(),
+                       base_url=url, sender=os.environ.get("HOSTNAME", APP))
+
+
 def from_env(on_cluster: bool) -> Publisher:
     app_id = os.environ.get("OPPORTUNITY_GITHUB_APP_ID")
     if app_id:
         return GitHubApp(app_id, os.environ["OPPORTUNITY_GITHUB_APP_KEY"],
                          os.environ["OPPORTUNITY_GITHUB_INSTALLATION_ID"],
-                         os.environ.get("OPPORTUNITY_GITHUB_REPO", REPO))
+                         os.environ.get("OPPORTUNITY_GITHUB_REPO", REPO), caller=Caller(APP, "web", sink=call_log()))
     if on_cluster:
         raise RuntimeError("OPPORTUNITY_GITHUB_APP_ID is not set")
     return LocalPublisher(Path(os.environ.get("OPPORTUNITY_PROPOSALS_DIR", "build/opportunity-proposals")))
