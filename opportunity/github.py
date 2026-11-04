@@ -16,6 +16,7 @@ the storage service, a file every two minutes, as the pod's own storage identity
 """
 from __future__ import annotations
 
+import functools
 import os
 from pathlib import Path
 from typing import Protocol
@@ -75,8 +76,10 @@ class LocalPublisher:
         return out.resolve().as_uri()
 
 
+@functools.cache
 def call_log() -> Sink | None:
-    """Where the site's call records go: its buffer in storage, when the deployment says so."""
+    """Where the site's call records go: its buffer in storage, when the deployment says so.
+    One for the process, started with the app, so it reports even before anyone visits."""
     url = os.environ.get("OPPORTUNITY_CALL_LOG_URL")
     if not url:
         return None

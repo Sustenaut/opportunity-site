@@ -24,6 +24,7 @@ templates.filters["short"] = lambda sha: (sha or "")[:7]
 templates.filters["num"] = lambda v, d=1: "" if v is None else f"{v:.{d}f}".rstrip("0").rstrip(".")
 
 app = FastAPI(title="Sustenaut opportunities", docs_url=None, redoc_url=None, openapi_url=None)
+github.call_log()  # its two-minute reports start now, not at the first page someone opens
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 
