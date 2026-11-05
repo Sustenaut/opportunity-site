@@ -284,7 +284,9 @@ def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request():
 
 def test_the_call_log_goes_to_storage_only_when_the_deployment_says(monkeypatch, tmp_path):
     monkeypatch.delenv("OPPORTUNITY_CALL_LOG_URL", raising=False)
+    github.call_log.cache_clear()
     assert github.call_log() is None
+    github.call_log.cache_clear()
     token = tmp_path / "token"
     token.write_text("pod-token\n")
     monkeypatch.setenv("OPPORTUNITY_CALL_LOG_URL", "https://storage.example")
@@ -295,6 +297,8 @@ def test_the_call_log_goes_to_storage_only_when_the_deployment_says(monkeypatch,
                                                                   "Lock": __import__("threading").Lock}))
     monkeypatch.setattr(storage_sink.atexit, "register", lambda f: None)
     sink = github.call_log()
+    assert github.call_log() is sink
+    github.call_log.cache_clear()
     assert isinstance(sink, storage_sink.StorageSink)
     assert sink.datasets == {"opportunity-site": "calls_opportunity_site"} and sink.sender == "app-7"
     assert sink.token() == "pod-token" and sink.base == "https://storage.example"
