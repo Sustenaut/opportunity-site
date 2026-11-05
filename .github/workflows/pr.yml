@@ -12,25 +12,32 @@ permissions:
 jobs:
   checks:
     name: ci
-    uses: Sustenaut/pubkit/.github/workflows/job-service-checks.yml@7914b2abb933747e303f5f981d8335d3704dcdb3 # v0.21.0
+    uses: Sustenaut/pubkit/.github/workflows/job-service-checks.yml@d634bd9ba97c6933561e9e7d1ceff5b975e8f22e # v0.28.0
     with: {"shellcheck": "with-secrets *.sh"}
 
   terraform:
     name: ci
-    uses: Sustenaut/pubkit/.github/workflows/job-service-terraform.yml@7914b2abb933747e303f5f981d8335d3704dcdb3 # v0.21.0
+    uses: Sustenaut/pubkit/.github/workflows/job-service-terraform.yml@d634bd9ba97c6933561e9e7d1ceff5b975e8f22e # v0.28.0
     with: {"terraform-dir": "infra"}
 
   tests:
     name: ci
-    uses: Sustenaut/pubkit/.github/workflows/job-service-tests.yml@7914b2abb933747e303f5f981d8335d3704dcdb3 # v0.21.0
+    uses: Sustenaut/pubkit/.github/workflows/job-service-tests.yml@d634bd9ba97c6933561e9e7d1ceff5b975e8f22e # v0.28.0
     with: {"setup": "python -m venv .venv && .venv/bin/pip install --quiet -r requirements.lock", "test": ".venv/bin/python -m pytest -q"}
+
+  sonar:
+    name: ci
+    needs: [tests]
+    uses: Sustenaut/pubkit/.github/workflows/job-sonar.yml@d634bd9ba97c6933561e9e7d1ceff5b975e8f22e # v0.28.0
+    with: {"reports": "sonar.python.coverage.reportPaths=*.xml sonar.javascript.lcov.reportPaths=lcov.info"}
+    secrets: { SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}' }
 
   # The one check a ruleset requires: it passes only when every job
   # above succeeded. None of them is ever skipped for not being asked for.
   passed:
     name: ci / passed
     if: always()
-    needs: [checks, terraform, tests]
+    needs: [checks, terraform, tests, sonar]
     runs-on: ubuntu-latest
     steps:
       - run: |

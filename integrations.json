@@ -3,7 +3,6 @@
     {
       "plugin": "bitwarden.secrets",
       "paths": [
-        "with-secrets",
         "with-secrets.json"
       ],
       "mode": "required"
@@ -44,6 +43,14 @@
       "plugin": "letsencrypt.certs",
       "paths": [
         "k8s/ingress.yaml"
+      ],
+      "mode": "required"
+    },
+    {
+      "plugin": "sonarcloud.scan",
+      "paths": [
+        ".github/workflows/main.yml",
+        ".github/workflows/pr.yml"
       ],
       "mode": "required"
     },
