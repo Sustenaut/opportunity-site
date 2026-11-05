@@ -48,6 +48,9 @@ spec:
             - --upstream=http://app:8080/
             - --redirect-url=https://opportunity.sustenaut.eu/oauth2/callback
             - --reverse-proxy=true
+            # Trust X-Forwarded-* only from the cluster's pods (k3s's cluster-cidr), where Traefik runs:
+            # its pod IP changes when it restarts, so the range rather than one address.
+            - --trusted-proxy-ip=10.42.0.0/16
             - --email-domain=*
             - --oidc-groups-claim=access
             - --allowed-group=opportunity
