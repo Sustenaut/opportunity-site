@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from integrations.calls import health
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -204,6 +204,93 @@ async def _review(subject: str, request: Request, who: auth.Person):
                              **extra)
     s.store.add_review(subject, verdict, note, f.get("sha") or s.content.now().sha, who.email)
     return RedirectResponse(f"{here}#reviews", status_code=303)
+
+
+# --- Files ------------------------------------------------------------------
+
+async def _upload_form(request: Request) -> dict[str, tuple[str, bytes]]:
+    """A multipart form's fields, each as (file name, bytes); no larger than storage takes."""
+    import email.parser
+    import email.policy
+
+    if not request.headers.get("content-type", "").startswith("multipart/form-data"):
+        raise HTTPException(415, "Send the file as a form upload")
+    if int(request.headers.get("content-length") or 0) > files.MAX_BYTES + 64 * 1024:
+        raise HTTPException(413, f"A file can be at most {files.MAX_BYTES // (1024 * 1024)} MB")
+    body = bytearray()
+    async for part in request.stream():
+        body += part
+        if len(body) > files.MAX_BYTES + 64 * 1024:
+            raise HTTPException(413, f"A file can be at most {files.MAX_BYTES // (1024 * 1024)} MB")
+    message = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
+        f"Content-Type: {request.headers['content-type']}\r\n\r\n".encode() + bytes(body))
+    fields = {}
+    for part in message.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if name:
+            fields[name] = (part.get_filename() or "", part.get_payload(decode=True) or b"")
+    return fields
+
+
+async def _upload(subject: str, request: Request, who: auth.Person):
+    """One file for a card or report, with an optional label, kept if it went to a client."""
+    s = Services.get()
+    item, here, kind = _resolve_subject(subject)
+    if not s.files:
+        raise HTTPException(404, "Uploads aren't switched on")
+    f = await _upload_form(request)
+    filename, data = f.get("file", ("", b""))
+    label = f.get("label", ("", b""))[1].decode("utf-8", "replace").strip()
+    kept = f.get("kept", ("", b""))[1] == b"on"
+
+    def again(status_code: int, error: str):
+        extra = {"reports": s.content.now().reports_for(subject)} if kind == "card" else {"slug": here[3:]}
+        return _subject_page(who, item, subject, here, kind=kind, status_code=status_code, file_error=error,
+                             **extra)
+
+    if not filename or not data:
+        return again(422, "Choose a file to upload.")
+    if len(label) > files.LABEL_CHARS:
+        return again(422, f"Keep the label under {files.LABEL_CHARS} characters.")
+    try:
+        s.files.put(subject, files.safe_name(filename), data, who.email, label=label, kept=kept)
+    except files.Refused as e:
+        return again(422, f"Storage didn't take it: {e}")
+    except files.Unavailable:
+        return again(503, "Storage isn't answering. Try again in a minute.")
+    return RedirectResponse(f"{here}#files", status_code=303)
+
+
+@app.get("/files/{file_id}/{name}")
+def stored_file(file_id: str, name: str, who: auth.Person = Depends(auth.person)):
+    """A stored file, for a team member: the site reads it from its private tenant. Always a
+    download, so a file never runs as one of the site's pages."""
+    import mimetypes
+
+    s = Services.get()
+    if not s.files or not re.fullmatch(r"[0-9a-f]{64}", file_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", name):
+        raise HTTPException(404, "No such file")
+    try:
+        data = s.files.get(file_id, name)
+    except LookupError:
+        raise HTTPException(404, "No such file") from None
+    except files.Unavailable:
+        raise HTTPException(503, "Storage isn't answering. Try again in a minute.") from None
+    except files.Refused as e:
+        raise HTTPException(502, f"Storage didn't give it: {e}") from None
+    return Response(data, media_type=mimetypes.guess_type(name)[0] or "application/octet-stream", headers={
+        "Content-Disposition": f'attachment; filename="{name}"', "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store"})
+
+
+@app.post("/c/{card_id}/files", dependencies=[Depends(auth.same_origin)])
+async def upload_card(card_id: str, request: Request, who: auth.Person = Depends(auth.person)):
+    return await _upload(card_id, request, who)
+
+
+@app.post("/r/{slug}/files", dependencies=[Depends(auth.same_origin)])
+async def upload_report(slug: str, request: Request, who: auth.Person = Depends(auth.person)):
+    return await _upload(f"research/{slug}", request, who)
 
 
 @app.post("/c/{card_id}/comments", dependencies=[Depends(auth.same_origin)])

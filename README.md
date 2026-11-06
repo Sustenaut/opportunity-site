@@ -52,8 +52,11 @@ the form was loaded, nothing is opened and the form says to reload.
 private tenant `opportunity`, which storage never cleans), not git. `opportunity/files.py`
 has the interface, `StorageFiles` on integrations' storage client (the pod's token,
 naming the person in `for` and the card in `subject`; a card's files are the tenant's
-listing for that subject) and a fake. The upload button stays disabled until the site
-has an upload route and the deployment sets `OPPORTUNITY_FILES_URL`.
+listing for that subject) and a fake. A card's or report's page has an upload form
+(a file, an optional label, and "kept" for one that went to a client), and its files are
+read back through the site (`/files/<id>/<name>`, always a download), as the tenant is
+private. Both are there once the deployment sets `OPPORTUNITY_FILES_URL`; until then the
+button stays disabled.
 
 Pages are server-rendered forms. The only script picks a comment's anchor
 without a reload; without it, the same links reload the page with the

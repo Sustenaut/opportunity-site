@@ -16,11 +16,9 @@ storage.sustenaut.eu (the principal ``k8s:opportunity/app``, which the tenant's
 person in ``for``. Its calls go through the site's ``Caller`` as storage.api, so they
 reach its call log.
 
-Not switched on yet: ``from_env`` returns None unless the deployment sets
-OPPORTUNITY_FILES_URL, so the pages show the upload button disabled. Left to do: an
-upload route and form in the site (``Files.put`` is ready for it), the button enabled in
-templates/_discussion.html, and OPPORTUNITY_FILES_URL=https://storage.sustenaut.eu set
-in the deployment (k8s/app.yaml), where the storage token's projected volume already is.
+A card's or report's page has the upload form (``POST /c/<id>/files``,
+``/r/<slug>/files``) once ``from_env`` gives a store: when the deployment sets
+OPPORTUNITY_FILES_URL. Without it the button stays disabled.
 """
 from __future__ import annotations
 
@@ -36,6 +34,31 @@ if TYPE_CHECKING:
 
 TENANT = "opportunity"
 BASE = "https://storage.sustenaut.eu"
+MAX_BYTES = 25 * 1024 * 1024  # the opportunity tenant's max_bytes in storage's tenants.json
+LABEL_CHARS = 200  # what storage keeps of a label
+
+
+class Refused(Exception):
+    """Storage said no: a type it doesn't take, a file too big, a token it refused."""
+
+
+class Unavailable(Exception):
+    """Storage didn't answer, or failed: another try may work."""
+
+
+def safe_name(filename: str) -> str:
+    """A file's name as storage takes it: letters, digits, dots, dashes and underscores,
+    starting with a letter or digit, at most 120, keeping its extension, which says its type."""
+    import re
+
+    base = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", base)
+    if not name[:1].isalnum():
+        name = "file" + name
+    if len(name) > 120:
+        stem, dot, ext = name.rpartition(".")
+        name = stem[:120 - len(dot + ext)] + dot + ext if dot and len(ext) < 10 else name[:120]
+    return name
 
 
 @dataclass(frozen=True)
@@ -55,6 +78,7 @@ class Files(Protocol):
     def put(self, subject: str, name: str, data: bytes, uploaded_by: str, *, label: str = "",
             kept: bool = False) -> StoredFile: ...
     def list(self, subject: str) -> list[StoredFile]: ...
+    def get(self, id: str, name: str) -> bytes: ...  # noqa: A002 - storage's name
 
 
 class StorageFiles:
@@ -67,10 +91,31 @@ class StorageFiles:
         self.storage = Storage(caller, tenant, base_url=self.base_url, token=token)
 
     def put(self, subject, name, data, uploaded_by, *, label="", kept=False):
-        got = self.storage.upload_file(data, name=name, label=label or None, subject=subject, kept=kept,
-                                       for_=uploaded_by)
+        from integrations.clients.storage import StorageError, StorageUnavailable
+
+        try:
+            got = self.storage.upload_file(data, name=name, label=label or None, subject=subject, kept=kept,
+                                           for_=uploaded_by)
+        except StorageError as e:
+            raise Refused(e.error or f"HTTP {e.status}") from e
+        except StorageUnavailable as e:
+            raise Unavailable(e.error or e.detail) from e
         return StoredFile(got["id"], subject, got["name"], f"{self.base_url}{got['url']}", got["type"], got["size"],
                           got["label"], got["kept"], uploaded_by)
+
+    def get(self, id, name):  # noqa: A002 - storage's name
+        """A stored file's bytes, read with the pod's token: the tenant is private, so a
+        browser can't read it from storage itself."""
+        from integrations.clients.storage import NotFound, StorageError, StorageUnavailable
+
+        try:
+            return self.storage.get_file(id, name)
+        except NotFound as e:
+            raise LookupError(f"{id}/{name}") from e
+        except StorageError as e:
+            raise Refused(e.error or f"HTTP {e.status}") from e
+        except StorageUnavailable as e:
+            raise Unavailable(e.error or e.detail) from e
 
     def list(self, subject):
         """The subject's files, from every page of the tenant's listing, in name order."""
@@ -97,6 +142,12 @@ class FakeFiles:
 
     def list(self, subject):
         return [f for (s, _, _), (f, _) in self.files.items() if s == subject]
+
+    def get(self, id, name):  # noqa: A002
+        for (_, fid, fname), (_, data) in self.files.items():
+            if (fid, fname) == (id, name):
+                return data
+        raise LookupError(f"{id}/{name}")
 
 
 def pod_token(path: str | None = None) -> Callable[[], str]:

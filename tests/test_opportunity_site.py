@@ -456,6 +456,132 @@ def test_files_wait_for_storage(site, monkeypatch):
     assert again.kept and sent.id != v2.id and len(fake.list("OPP-10")) == 2
 
 
+def test_with_uploads_on_a_card_has_the_form_and_a_file_goes_to_its_subject(site, monkeypatch):
+    client, *_ = site
+    fake = files.FakeFiles()
+    monkeypatch.setattr(main.Services, "files", fake)
+    page = client.get("/c/OPP-10").text
+    assert '<form method="post" action="/c/OPP-10/files" enctype="multipart/form-data">' in page
+    assert "disabled>Upload a file" not in page
+    data = b"%PDF-1.7\r\n\x00\xff binary\r\n--not-a-boundary\r\n"
+    answer = client.post("/c/OPP-10/files", headers=ORIGIN, follow_redirects=False,
+                         files={"file": ("OPP-10 offer (v1).pdf", data, "application/pdf")},
+                         data={"label": " OPP-10 offer v1 ", "kept": "on"})
+    assert answer.status_code == 303 and answer.headers["location"] == "/c/OPP-10#files"
+    stored, = fake.list("OPP-10")
+    assert (stored.name, stored.label, stored.kept, stored.uploaded_by) == ("OPP-10-offer-v1-.pdf", "OPP-10 offer v1", True, ME)
+    assert fake.files[("OPP-10", stored.id, stored.name)][1] == data
+    shown = client.get("/c/OPP-10").text
+    assert "OPP-10-offer-v1-.pdf" in shown and "OPP-10 offer v1" in shown and "kept" in shown
+
+
+def test_a_stored_file_is_read_through_the_site_as_a_download(site, monkeypatch):
+    client, *_ = site
+    fake = files.FakeFiles()
+    monkeypatch.setattr(main.Services, "files", fake)
+    stored = fake.put("OPP-10", "chart.svg", b"<svg onload=alert(1)></svg>", ME)
+    page = client.get("/c/OPP-10").text
+    assert f'<a href="/files/{stored.id}/chart.svg">chart.svg</a>' in page
+    got = client.get(f"/files/{stored.id}/chart.svg")
+    assert got.status_code == 200 and got.content == b"<svg onload=alert(1)></svg>"
+    assert got.headers["content-disposition"] == 'attachment; filename="chart.svg"'
+    assert got.headers["x-content-type-options"] == "nosniff" and got.headers["cache-control"] == "private, no-store"
+    for path in (f"/files/{stored.id}/other.svg", "/files/abc/chart.svg", f"/files/{stored.id}/..%2Fx"):
+        assert client.get(path).status_code == 404, path
+
+    class Down(files.FakeFiles):
+        def get(self, id, name):
+            raise files.Unavailable("no answer")
+
+    monkeypatch.setattr(main.Services, "files", Down())
+    assert client.get(f"/files/{stored.id}/chart.svg").status_code == 503
+    monkeypatch.setattr(main.Services, "files", None)
+    assert client.get(f"/files/{stored.id}/chart.svg").status_code == 404
+
+
+def test_the_client_reads_a_file_with_the_pods_token():
+    url = f"GET https://storage.sustenaut.eu/opportunity/f/{'a' * 64}/a.pdf"
+    uploads, replay, _ = stored_files({url: {"status": 200, "text": "%PDF"}})
+    assert uploads.get("a" * 64, "a.pdf") == b"%PDF"
+    assert replay.sent[0].headers["Authorization"] == "Bearer pod-token"
+    for answer, error in (({"status": 404, "json": {"error": "not found"}}, LookupError),
+                          ({"status": 403, "json": {"error": "no"}}, files.Refused), ({"error": "down"}, files.Unavailable)):
+        missing, _, _ = stored_files({url: answer})
+        with pytest.raises(error):
+            missing.get("a" * 64, "a.pdf")
+
+
+def test_a_reports_files_are_its_research_subject(site, monkeypatch):
+    client, *_ = site
+    fake = files.FakeFiles()
+    monkeypatch.setattr(main.Services, "files", fake)
+    slug = next(iter(main.Services.content.now().reports))
+    answer = client.post(f"/r/{slug}/files", headers=ORIGIN, follow_redirects=False,
+                         files={"file": ("figure.png", b"\x89PNG", "image/png")})
+    assert answer.status_code == 303
+    assert [f.kept for f in fake.list(f"research/{slug}")] == [False]
+
+
+def test_an_upload_without_a_file_or_with_a_long_label_says_so(site, monkeypatch):
+    client, *_ = site
+    monkeypatch.setattr(main.Services, "files", files.FakeFiles())
+    empty = client.post("/c/OPP-10/files", headers=ORIGIN, files={"file": ("", b"", "application/pdf")})
+    assert empty.status_code == 422 and "Choose a file to upload." in empty.text
+    long = client.post("/c/OPP-10/files", headers=ORIGIN, files={"file": ("a.pdf", b"%PDF", "application/pdf")},
+                       data={"label": "x" * 201})
+    assert long.status_code == 422 and "under 200 characters" in long.text
+
+
+def test_storage_refusing_or_down_is_shown_on_the_page(site, monkeypatch):
+    client, *_ = site
+
+    class Refusing(files.FakeFiles):
+        def put(self, *a, **kw):
+            raise files.Refused("opportunity takes pdf, pptx, docx, png, jpg, svg, csv, xlsx, not .exe")
+
+    class Down(files.FakeFiles):
+        def put(self, *a, **kw):
+            raise files.Unavailable("no answer")
+
+    monkeypatch.setattr(main.Services, "files", Refusing())
+    said = client.post("/c/OPP-10/files", headers=ORIGIN, files={"file": ("a.exe", b"MZ", "application/x")})
+    assert said.status_code == 422 and "Storage didn&#39;t take it: opportunity takes pdf" in said.text
+    monkeypatch.setattr(main.Services, "files", Down())
+    down = client.post("/c/OPP-10/files", headers=ORIGIN, files={"file": ("a.pdf", b"%PDF", "application/pdf")})
+    assert down.status_code == 503 and "Try again in a minute" in down.text
+
+
+def test_uploads_need_storage_switched_on_the_sites_own_page_and_a_form(site, monkeypatch):
+    client, *_ = site
+    one = {"file": ("a.pdf", b"%PDF", "application/pdf")}
+    assert client.post("/c/OPP-10/files", headers=ORIGIN, files=one).status_code == 404
+    monkeypatch.setattr(main.Services, "files", files.FakeFiles())
+    assert client.post("/c/OPP-10/files", headers={"origin": "https://evil.example"}, files=one).status_code == 403
+    assert client.post("/c/OPP-10/files", headers=ORIGIN, data={"label": "x"}).status_code == 415
+    assert client.post("/c/NOPE/files", headers=ORIGIN, files=one).status_code == 404
+    monkeypatch.setattr(files, "MAX_BYTES", 10)
+    big = client.post("/c/OPP-10/files", headers=ORIGIN, files={"file": ("a.pdf", b"x" * (70 * 1024), "application/pdf")})
+    assert big.status_code == 413
+
+
+def test_a_files_name_is_made_one_storage_takes():
+    assert files.safe_name("C:\\Users\\me\\Market report (v3).pdf") == "Market-report-v3-.pdf"
+    assert files.safe_name("../.hidden.txt") == "file.hidden.txt"
+    assert files.safe_name("ü.png") == "file-.png" and files.safe_name("") == "file"
+    long = files.safe_name("a" * 300 + ".pdf")
+    assert len(long) == 120 and long.endswith(".pdf")
+
+
+def test_storage_saying_no_or_not_answering_becomes_the_sites_own_errors():
+    uploads, _, _ = stored_files({"POST https://storage.sustenaut.eu/opportunity/files":
+                                  {"status": 415, "json": {"error": "opportunity takes pdf, not .exe"}}})
+    with pytest.raises(files.Refused, match="opportunity takes pdf, not .exe"):
+        uploads.put("OPP-10", "a.exe", b"MZ", ME)
+    down, _, _ = stored_files({})
+    with pytest.raises(files.Unavailable):
+        down.put("OPP-10", "a.pdf", b"%PDF", ME)
+
+
 def stored_files(responses):
     from integrations.calls import Caller, MemorySink, Replay
 
