@@ -1,34 +1,38 @@
 """Files that go with cards and reports: attachments (photos, figures) and
 client documents built from a report. They are kept in storage.sustenaut.eu
-(Sustenaut/storage) under the tenant ``opportunity``, never in git.
-
-The storage API (Sustenaut/storage, "general files and kept client documents"):
-
-    POST /opportunity/files        multipart "file", "name", "label", "kept", "for"
-                                   -> {id, name, url, type, size, label, kept}
-    GET  /opportunity/f/<id>/<name>
+(Sustenaut/storage) under the private tenant ``opportunity``, never in git, and read
+and written with integrations' generated storage client (``integrations.clients.storage``).
 
 A file's id is the SHA-256 of its content, so a new version of a document is
 a new file; its ``label`` ("OPP-02 market report v3") says which version it
-is. A document that went to a client is uploaded ``kept`` and is never
-cleaned up. The site uploads with its pod's service-account token for the
-audience storage.sustenaut.eu (the principal ``k8s:opportunity/app``, which
-the tenant's ``write`` list names), read from its file on each upload, and
-names the person in ``for``. (A GitHub App installation token can't upload:
-storage can't tell that it may write.)
+is, and its ``subject`` (the card id, or research/<slug>) which card it goes with. A
+card's files are the tenant's listing, filtered by subject, so the site keeps no table of
+its uploads. A document that went to a client is uploaded ``kept``. The tenant is
+private, so storage never cleans it up, and the site publishes no in-use list.
 
-TODO(storage): not switched on yet. Storage has no listing, so the site must
-record each upload (subject, id, name, label, kept, who) in its own database
-and publish the ids it uses at /storage-in-use.json for storage's nightly
-clean-up (reachable without the proxy's sign-in). Until that and the storage
-deploy are done, ``from_env`` returns None, the pages show the upload button
-disabled, and only tests use ``FakeFiles`` and ``StorageClient``.
+The site uploads with its pod's service-account token for the audience
+storage.sustenaut.eu (the principal ``k8s:opportunity/app``, which the tenant's
+``read`` and ``write`` lists name), read from its file on each call, and names the
+person in ``for``. Its calls go through the site's ``Caller`` as storage.api, so they
+reach its call log.
+
+Not switched on yet: ``from_env`` returns None unless the deployment sets
+OPPORTUNITY_FILES_URL, so the pages show the upload button disabled. Left to do: an
+upload route and form in the site (``Files.put`` is ready for it), the button enabled in
+templates/_discussion.html, and OPPORTUNITY_FILES_URL=https://storage.sustenaut.eu set
+in the deployment (k8s/app.yaml), where the storage token's projected volume already is.
 """
 from __future__ import annotations
 
 import hashlib
+import mimetypes
+import os
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable, Protocol
+
+if TYPE_CHECKING:
+    from integrations.calls import Caller
 
 TENANT = "opportunity"
 BASE = "https://storage.sustenaut.eu"
@@ -43,7 +47,7 @@ class StoredFile:
     type: str
     size: int
     label: str
-    kept: bool  # a client document that went out: never cleaned up
+    kept: bool  # a client document that went out
     uploaded_by: str
 
 
@@ -53,46 +57,29 @@ class Files(Protocol):
     def list(self, subject: str) -> list[StoredFile]: ...
 
 
-class StorageClient:
-    """storage.sustenaut.eu, tenant ``opportunity``, with a bearer token from ``token()`` (pod_token)."""
+class StorageFiles:
+    """The tenant ``opportunity`` in storage, through integrations' storage client."""
 
-    def __init__(self, token: Callable[[], str], base_url: str = BASE, tenant: str = TENANT, transport=None):
-        self.token, self.base_url, self.tenant = token, base_url.rstrip("/"), tenant
-        self.transport = transport  # integrations' Network unless a test passes another
+    def __init__(self, caller: Caller, token: Callable[[], str], base_url: str = BASE, tenant: str = TENANT):
+        from integrations.clients.storage import Storage
+
+        self.base_url = base_url.rstrip("/")
+        self.storage = Storage(caller, tenant, base_url=self.base_url, token=token)
 
     def put(self, subject, name, data, uploaded_by, *, label="", kept=False):
-        from integrations.calls import Network, Request
-
-        fields = {"name": name, "label": label, "kept": "true" if kept else "false", "for": uploaded_by}
-        body, content_type = multipart(fields, "file", name, data)
-        r = (self.transport or Network()).send(Request(
-            "POST", f"{self.base_url}/{self.tenant}/files", body=body,
-            headers={"Authorization": f"Bearer {self.token()}", "Content-Type": content_type}), 60)
-        if r.status != 200:
-            raise RuntimeError(f"storage said {r.status or r.error}: {r.body[:300].decode('utf-8', 'replace')}")
-        got = r.json()
+        got = self.storage.upload_file(data, name=name, label=label or None, subject=subject, kept=kept,
+                                       for_=uploaded_by)
         return StoredFile(got["id"], subject, got["name"], f"{self.base_url}{got['url']}", got["type"], got["size"],
                           got["label"], got["kept"], uploaded_by)
 
     def list(self, subject):
-        raise NotImplementedError("TODO(storage): the site records its uploads itself; storage has no listing")
-
-
-def multipart(fields: dict[str, str], file_field: str, filename: str, data: bytes) -> tuple[bytes, str]:
-    """A multipart/form-data body and its Content-Type, so uploads need no HTTP library of their own."""
-    import uuid
-
-    boundary = uuid.uuid4().hex
-
-    def quoted(s: str) -> str:
-        return s.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", "")
-
-    parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{quoted(k)}"\r\n\r\n{v}\r\n'.encode()
-             for k, v in fields.items()]
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{quoted(file_field)}"; '
-                 f'filename="{quoted(filename)}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()
-                 + data + b"\r\n")
-    return b"".join(parts) + f"--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
+        """The subject's files, from every page of the tenant's listing, in name order."""
+        found = self.storage.list_files(subject=subject)
+        return [StoredFile(f["id"], subject, f["name"], f"{self.base_url}{f['url']}",
+                           mimetypes.guess_type(f["name"])[0] or "application/octet-stream", f["size"],
+                           f["metadata"].get("label", ""), f["metadata"].get("kept") == "true",
+                           f["metadata"].get("for") or f["metadata"].get("by", ""))
+                for f in sorted(found, key=lambda f: (f["name"], f["id"]))]
 
 
 class FakeFiles:
@@ -115,12 +102,18 @@ class FakeFiles:
 def pod_token(path: str | None = None) -> Callable[[], str]:
     """Reads the projected service-account token afresh on each call: the
     kubelet renews the file before the token expires. Never logged or kept."""
-    import os
-    from pathlib import Path
-
     file = Path(path or os.environ.get("OPPORTUNITY_STORAGE_TOKEN_FILE", "/var/run/secrets/storage.sustenaut.eu/token"))
     return lambda: file.read_text().strip()
 
 
 def from_env() -> Files | None:
-    return None  # TODO(storage): StorageClient(pod_token()) once the steps in the module docstring are done
+    """Storage, when the deployment says where it is (OPPORTUNITY_FILES_URL); else None,
+    and the pages keep the upload button disabled."""
+    url = os.environ.get("OPPORTUNITY_FILES_URL")
+    if not url:
+        return None
+    from integrations.calls import Caller
+
+    from .github import APP, call_log
+
+    return StorageFiles(Caller(APP, "web", sink=call_log()), pod_token(), base_url=url)
