@@ -81,7 +81,10 @@ spec:
             # Its GitHub calls' records, as files in its buffer there.
             - name: OPPORTUNITY_CALL_LOG_URL
               value: https://storage.sustenaut.eu
-            # The file, not the token: storage.py reads it on each upload.
+            # Card and report files, in its private tenant there (opportunity/files.py).
+            - name: OPPORTUNITY_FILES_URL
+              value: https://storage.sustenaut.eu
+            # The file, not the token: the site reads it for each call to storage.
             - name: OPPORTUNITY_STORAGE_TOKEN_FILE
               value: /var/run/secrets/storage.sustenaut.eu/token
           resources:

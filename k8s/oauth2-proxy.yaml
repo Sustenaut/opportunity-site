@@ -6,8 +6,7 @@
 # every 4 minutes, which also keeps the access token valid (it lasts 5).
 # It hands the app the account's verified email in X-Forwarded-Email and that token in
 # X-Forwarded-Access-Token, replacing whatever the browser sent; the app asks on each
-# request whether the person's access has changed. Open without sign-in: /healthz, and /storage-in-use.json, which
-# storage.sustenaut.eu's nightly clean-up reads.
+# request whether the person's access has changed. Open without sign-in: /healthz.
 apiVersion: v1
 kind: Service
 metadata:
@@ -62,7 +61,6 @@ spec:
             - --cookie-samesite=lax
             - --skip-provider-button=true
             - --skip-auth-route=GET=^/healthz$
-            - --skip-auth-route=GET=^/storage-in-use\.json$
             - --silence-ping-logging=true
           env:
             - name: OAUTH2_PROXY_CLIENT_ID
