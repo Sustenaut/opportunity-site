@@ -48,12 +48,12 @@ branch `opportunity/<card or report>-<user>-<n>` and a pull request that
 names the editor, in business-plan, through a GitHub App. If the file changed on main since
 the form was loaded, nothing is opened and the form says to reload.
 
-**Files.** Attachments and client documents (uploaded `kept`, so never cleaned up) will live in
-storage.sustenaut.eu (tenant `opportunity`), not git. `opportunity/files.py`
-has the interface, a client for storage's `POST /opportunity/files` (with
-the GitHub App's installation token, naming the person in `for`) and a
-fake. The upload button stays disabled until the site records its uploads
-and publishes `/storage-in-use.json`, and storage is deployed.
+**Files.** Attachments and client documents will live in storage.sustenaut.eu (the
+private tenant `opportunity`, which storage never cleans), not git. `opportunity/files.py`
+has the interface, `StorageFiles` on integrations' storage client (the pod's token,
+naming the person in `for` and the card in `subject`; a card's files are the tenant's
+listing for that subject) and a fake. The upload button stays disabled until the site
+has an upload route and the deployment sets `OPPORTUNITY_FILES_URL`.
 
 Pages are server-rendered forms. The only script picks a comment's anchor
 without a reload; without it, the same links reload the page with the
@@ -85,7 +85,7 @@ like auth (Sustenaut/auth):
 |---|---|
 | The app | `k8s/app.yaml`: one replica, image `ghcr.io/sustenaut/sustenaut-opportunity` (no cards, no bizplan), the checkout in an emptyDir. No ingress points at it, and `k8s/admin/network-policy.yaml` lets only oauth2-proxy reach it. |
 | PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
-| oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` and `/storage-in-use.json` are open without sign-in. |
+| oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` is open without sign-in, as is `/storage-in-use.json` until `k8s/oauth2-proxy.yaml` drops its route: nothing serves or needs it now. |
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
 | Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubkit.json`. |
 | Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (`infra/main.tf`, kept 30 days). |

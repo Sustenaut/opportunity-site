@@ -444,8 +444,9 @@ def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
 
 # --- Files -------------------------------------------------------------------
 
-def test_files_wait_for_storage(site):
+def test_files_wait_for_storage(site, monkeypatch):
     client, *_ = site
+    monkeypatch.delenv("OPPORTUNITY_FILES_URL", raising=False)
     assert files.from_env() is None
     assert '<button type="button" disabled>Upload a file</button>' in client.get("/c/OPP-10").text
     fake = files.FakeFiles()
@@ -454,27 +455,75 @@ def test_files_wait_for_storage(site):
     v2 = fake.put("OPP-10", "offer.pdf", b"%PDF-2", ME, label="OPP-10 offer v2")
     assert again.kept and sent.id != v2.id and len(fake.list("OPP-10")) == 2
 
+
+def stored_files(responses):
+    from integrations.calls import Caller, MemorySink, Replay
+
+    sink, replay = MemorySink(), Replay(responses)
+    caller = Caller("opportunity-site", "web", sink=sink, transport=replay, sleep=lambda _: None)
+    return files.StorageFiles(caller, lambda: "pod-token"), replay, sink
+
+
+def test_an_upload_goes_to_storage_with_its_card_as_subject():
     import email.parser
 
-    from integrations.calls import Response
-    seen = {}
-
-    class Transport:
-        def send(self, request, timeout):
-            seen.update(request=request, timeout=timeout)
-            return Response(200, json.dumps({
-                "id": "f" * 64, "name": "offer.pdf", "url": f"/opportunity/f/{'f' * 64}/offer.pdf",
-                "type": "application/pdf", "size": 6, "label": "v1", "kept": True}).encode())
-    stored = files.StorageClient(lambda: "ghs_token", transport=Transport()).put(
-        "OPP-10", "offer.pdf", b"%PDF-1", ME, label="v1", kept=True)
-    sent = seen["request"]
+    answer = {"id": "f" * 64, "name": "offer.pdf", "url": f"/opportunity/f/{'f' * 64}/offer.pdf",
+              "type": "application/pdf", "size": 6, "label": "v1", "subject": "OPP-10", "kept": True}
+    uploads, replay, sink = stored_files({"POST https://storage.sustenaut.eu/opportunity/files": {"status": 200, "json": answer}})
+    stored = uploads.put("OPP-10", "offer.pdf", b"%PDF-1", ME, label="v1", kept=True)
+    sent = replay.sent[0]
     assert sent.method == "POST" and sent.url == "https://storage.sustenaut.eu/opportunity/files"
-    assert sent.headers["Authorization"] == "Bearer ghs_token" and seen["timeout"] == 60
+    assert sent.headers["Authorization"] == "Bearer pod-token"
     form = email.parser.BytesParser().parsebytes(
         f"Content-Type: {sent.headers['Content-Type']}\r\n\r\n".encode() + sent.body)
     got = {p.get_param("name", header="content-disposition"): p.get_payload(decode=True) for p in form.get_payload()}
-    assert got == {"name": b"offer.pdf", "label": b"v1", "kept": b"true", "for": ME.encode(), "file": b"%PDF-1"}
-    assert stored.url == f"https://storage.sustenaut.eu/opportunity/f/{'f' * 64}/offer.pdf" and stored.kept
+    assert got == {"file": b"%PDF-1", "name": b"offer.pdf", "label": b"v1", "subject": b"OPP-10", "kept": b"true",
+                   "for": ME.encode()}
+    assert stored == files.StoredFile("f" * 64, "OPP-10", "offer.pdf",
+                                      f"https://storage.sustenaut.eu/opportunity/f/{'f' * 64}/offer.pdf",
+                                      "application/pdf", 6, "v1", True, ME)
+    assert [(r.plugin, r.operation, r.outcome) for r in sink.records] == [("storage.api", "write", "ok")]
+
+
+def test_a_cards_files_are_the_tenants_listing_for_its_subject():
+    def listed(fid, name, **metadata):
+        return {"name": name, "id": fid * 64, "url": f"/opportunity/f/{fid * 64}/{name}", "size": 3,
+                "uploaded": "2026-11-06T08:00:00.000Z", "metadata": metadata}
+
+    base = "GET https://storage.sustenaut.eu/opportunity/list?prefix=f%2F"
+    uploads, replay, _ = stored_files({
+        base: {"status": 200, "json": {"files": [
+            listed("b", "terms.pdf", subject="OPP-10", label="v2", kept="true", by="k8s:opportunity/app", **{"for": ME}),
+            listed("c", "other.pdf", subject="OPP-11", by="k8s:opportunity/app")], "cursor": "2"}},
+        f"{base}&cursor=2": {"status": 200, "json": {"files": [
+            listed("a", "figure.png", subject="OPP-10", by="k8s:opportunity/app"), listed("d", "old.pdf")], "cursor": None}}})
+    found = uploads.list("OPP-10")
+    assert [(f.name, f.type, f.label, f.kept, f.uploaded_by) for f in found] == [
+        ("figure.png", "image/png", "", False, "k8s:opportunity/app"), ("terms.pdf", "application/pdf", "v2", True, ME)]
+    assert found[1].url == f"https://storage.sustenaut.eu/opportunity/f/{'b' * 64}/terms.pdf"
+    assert len(replay.sent) == 2 and replay.sent[0].headers["Authorization"] == "Bearer pod-token"
+
+
+def test_storage_refusing_a_listing_is_an_error_not_an_empty_list():
+    from integrations.clients.storage import StorageError
+
+    uploads, _, _ = stored_files({"GET https://storage.sustenaut.eu/opportunity/list?prefix=f%2F":
+                                  {"status": 403, "json": {"error": "k8s:x may not read here"}}})
+    with pytest.raises(StorageError, match="HTTP 403 k8s:x may not read here"):
+        uploads.list("OPP-10")
+
+
+def test_files_are_on_when_the_deployment_says_where_storage_is(monkeypatch, tmp_path):
+    token = tmp_path / "token"
+    token.write_text("pod-token\n")
+    monkeypatch.setenv("OPPORTUNITY_FILES_URL", "https://storage.example/")
+    monkeypatch.setenv("OPPORTUNITY_STORAGE_TOKEN_FILE", str(token))
+    monkeypatch.delenv("OPPORTUNITY_CALL_LOG_URL", raising=False)
+    github.call_log.cache_clear()
+    made = files.from_env()
+    assert isinstance(made, files.StorageFiles) and made.base_url == "https://storage.example"
+    assert made.storage.tenant == "opportunity" and made.storage._token() == "pod-token"
+    assert made.storage.caller.repo == "opportunity-site"
 
 
 # --- PostgreSQL --------------------------------------------------------------

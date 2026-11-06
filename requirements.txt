@@ -7,4 +7,4 @@ Markdown  # card and report bodies
 PyYAML  # the cards' front matter, which business-plan's bizplan/opportunities.py reads
 pandas  # business-plan's bizplan.opportunities.rows
 psycopg[binary]  # comments and reviews in PostgreSQL
-integrations[github-app,storage-sink] @ https://github.com/Sustenaut/integrations/releases/download/v0.12.1/integrations-0.12.1-py3-none-any.whl  # the GitHub calls, their call log, and storage uploads
+integrations[github-app,storage-sink] @ https://github.com/Sustenaut/integrations/releases/download/v0.14.0/integrations-0.14.0-py3-none-any.whl  # the GitHub calls, their call log, and storage uploads
