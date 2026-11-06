@@ -17,6 +17,10 @@ resources:
   - oauth2-proxy.yaml
   - ingress.yaml
   - backup.yaml
+# The app's hardening and probes, shared by every service (pubkit's README, "Deploying a
+# service to k3s"). PostgreSQL and oauth2-proxy keep their own.
+components:
+  - https://github.com/Sustenaut/pubkit//k8s/components/app?ref=f89d413614a9fd475c741cf01eba1343c3f7b58d # v0.30.0
 images:
   - name: ghcr.io/sustenaut/sustenaut-opportunity
     newTag: unset

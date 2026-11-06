@@ -16,6 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
+from integrations.calls import Check
+
+# Its own PostgreSQL (k8s/postgres.yaml), not an integration: health() counts it as required.
+PLUGIN = "opportunity.postgres"
+
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 VERDICTS = {"reviewed": "Reviewed", "concerns": "Reviewed with concerns", "not-convinced": "Not convinced"}
 NOTE_CHARS = 500
@@ -58,12 +63,16 @@ class Store(Protocol):
     def reviews(self, subject: str) -> list[Review]: ...
     def add_review(self, subject: str, verdict: str, note: str, sha: str, author: str) -> Review: ...
     def tally(self) -> dict[str, tuple[int, int]]: ...  # subject -> (open threads, reviews)
+    def ping(self) -> None: ...
 
 
 class MemoryStore:
     def __init__(self):
         self._comments: dict[int, Comment] = {}
         self._reviews: list[Review] = []
+
+    def ping(self) -> None:
+        """Always there."""
 
     def comments(self, subject):
         return sorted((c for c in self._comments.values() if c.card_or_report == subject),
@@ -113,6 +122,19 @@ class MemoryStore:
             self.add_review(r["subject"], r["verdict"], r.get("note", ""), r["sha"], r["author"])
 
 
+def check(s: Store | None) -> Check:
+    """Whether the site can reach its database, which no page can do without. A store not
+    made yet is checked from the environment, without migrating it."""
+    if s is None:
+        url = os.environ.get("OPPORTUNITY_DATABASE_URL")
+        s = PostgresStore(url) if url else MemoryStore()
+    try:
+        s.ping()
+    except Exception as e:  # noqa: BLE001 - whatever the driver raises means not reachable
+        return Check(PLUGIN, False, f"{type(e).__name__}: {e}")
+    return Check(PLUGIN, True)
+
+
 class PostgresStore:
     """One short connection per call: the site is small and quiet."""
 
@@ -122,10 +144,14 @@ class PostgresStore:
     def __init__(self, url: str):
         self.url = url
 
-    def _connect(self):
+    def _connect(self, **options):
         import psycopg
 
-        return psycopg.connect(self.url)
+        return psycopg.connect(self.url, **options)
+
+    def ping(self) -> None:
+        with self._connect(connect_timeout=3) as conn:
+            conn.execute("SELECT 1")
 
     def migrate(self, folder: Path = MIGRATIONS) -> list[str]:
         """Apply the migrations not yet applied, each in its own transaction; the names applied."""
