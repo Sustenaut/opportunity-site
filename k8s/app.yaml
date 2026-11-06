@@ -29,10 +29,9 @@ spec:
         app: opportunity
     spec:
       serviceAccountName: app # service-accounts.yaml: no RBAC, no API token
-      automountServiceAccountToken: false
+      # Its hardening and probes come from pubkit's app component (kustomization.yaml).
+      # The root filesystem is read-only, so what it writes goes to checkout and tmp.
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
         fsGroup: 1000
       containers:
         - name: app
@@ -85,11 +84,6 @@ spec:
             # The file, not the token: storage.py reads it on each upload.
             - name: OPPORTUNITY_STORAGE_TOKEN_FILE
               value: /var/run/secrets/storage.sustenaut.eu/token
-          readinessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-            periodSeconds: 10
           resources:
             requests:
               cpu: 50m
@@ -99,11 +93,16 @@ spec:
           volumeMounts:
             - name: checkout
               mountPath: /data
+            # Uploads pass through a temporary directory (edits.py), and git uses one too.
+            - name: tmp
+              mountPath: /tmp
             - name: storage-token
               mountPath: /var/run/secrets/storage.sustenaut.eu
               readOnly: true
       volumes:
         - name: checkout
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
         # A token for storage.sustenaut.eu only (it is no use against the
         # Kubernetes API), renewed by the kubelet before its 10 minutes run out.

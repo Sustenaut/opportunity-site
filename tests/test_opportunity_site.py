@@ -502,6 +502,32 @@ def test_postgres_store():
         s.add_review("OPP-10", "maybe", "", "abc", ME)
 
 
+def test_the_site_is_alive_and_ready_with_its_database():
+    http = TestClient(main.app)
+    assert http.get("/livez").json() == {"ok": True}
+    assert http.get("/healthz").json() == {"ok": True, "unhealthy": []}
+
+
+def test_a_database_it_cannot_reach_makes_it_unready_but_not_dead(monkeypatch):
+    class Down(store.MemoryStore):
+        def ping(self):
+            raise OSError("connection refused")
+
+    monkeypatch.setattr(main.Services, "store", Down())
+    http = TestClient(main.app)
+    answer = http.get("/healthz")
+    assert answer.status_code == 503 and answer.json() == {"ok": False, "unhealthy": ["opportunity.postgres"]}
+    assert http.get("/livez").status_code == 200
+
+
+def test_a_store_not_made_yet_is_checked_from_the_environment(monkeypatch):
+    monkeypatch.setenv("OPPORTUNITY_DATABASE_URL", "host=127.0.0.1 port=1 dbname=none")
+    found = store.check(None)
+    assert not found.ok and found.plugin == "opportunity.postgres"
+    monkeypatch.delenv("OPPORTUNITY_DATABASE_URL")
+    assert store.check(None).ok
+
+
 def test_the_storage_token_is_read_from_its_file_on_each_upload(tmp_path):
     """The kubelet renews the projected token's file, so each upload reads it afresh."""
     from opportunity import files

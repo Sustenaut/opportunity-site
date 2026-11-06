@@ -1,11 +1,10 @@
 # Build and deploy the opportunity site (opportunity.sustenaut.eu) on each merge
-# to main, or by hand. The image goes to GitHub's container registry and holds
-# no cards and no bizplan: the site reads both from its checkout of
-# business-plan. Then the manifests in k8s/, rendered with that image, go to the
-# Sustenaut k3s server (shared-infra's infra/hetzner.tf) over SSH, where the
-# deploy key can only run sustenaut-deploy: apply in namespace opportunity and
-# wait. SSH is reachable over Sustenaut's tailnet only, so the job joins it
-# first, as tag:ci.
+# to main, or by hand, with pubkit's k8s-deploy.yml (pubkit's README, "Deploying a
+# service to k3s"). The image goes to GitHub's container registry and holds no
+# cards and no bizplan: the site reads both from its checkout of business-plan.
+# Then the manifests in k8s/, rendered with that image, go to the Sustenaut k3s
+# server (shared-infra's infra/hetzner.tf) over SSH and the tailnet, where the
+# deploy key can only run sustenaut-deploy: apply in namespace opportunity and wait.
 #
 # Needs the same secrets and variables as Sustenaut/auth's auth.yml
 # (Sustenaut/auth's README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
@@ -21,61 +20,19 @@ permissions:
   contents: read
   packages: write
 
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
-env:
-  IMAGE: ghcr.io/sustenaut/sustenaut-opportunity
-
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Build the image
-        run: docker build -t "${IMAGE}:${GITHUB_SHA}" .
-
+    uses: Sustenaut/pubkit/.github/workflows/k8s-deploy.yml@c7785ba2f32bd5c5a78053e9bfeaa1f966ae36f1 # v0.30.0
+    with:
+      image: ghcr.io/sustenaut/sustenaut-opportunity
+      deploys: k8s opportunity
       # The image must start, hold what the app imports and what bizplan needs,
       # and hold no bizplan: that comes from the checkout at runtime.
-      - name: Check the image
-        run: |
-          docker run --rm "${IMAGE}:${GITHUB_SHA}" python -c '
-          import importlib.util, opportunity.main, psycopg, pandas, yaml
-          from pathlib import Path
-          assert importlib.util.find_spec("bizplan") is None
-          assert sorted(p.name for p in Path("opportunity/migrations").glob("*.sql"))'
-          docker run --rm --entrypoint git "${IMAGE}:${GITHUB_SHA}" --version
-
-      - name: Push the image
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push "${IMAGE}:${GITHUB_SHA}"
-
-      - name: Render the manifests
-        working-directory: k8s
-        run: |
-          kustomize edit set image "${IMAGE}=${IMAGE}:${GITHUB_SHA}"
-          kustomize build . > "${RUNNER_TEMP}/opportunity.yaml"
-          grep -q "${IMAGE}:${GITHUB_SHA}" "${RUNNER_TEMP}/opportunity.yaml"
-
-      - name: Join Sustenaut's tailnet
-        if: vars.SUSTENAUT_SERVER != ''
-        uses: tailscale/github-action@v3
-        with:
-          oauth-client-id: ${{ secrets.TS_GH_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_GH_OAUTH_SECRET }}
-          tags: tag:ci
-
-      - name: Deploy to the k3s server
-        if: vars.SUSTENAUT_SERVER != ''
-        env:
-          DEPLOY_KEY: ${{ secrets.SUSTENAUT_DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ vars.SUSTENAUT_KNOWN_HOSTS }}
-          SERVER: ${{ vars.SUSTENAUT_SERVER }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes "deploy@${SERVER}" opportunity < "${RUNNER_TEMP}/opportunity.yaml"
+      check: |
+        docker run --rm "$IMAGE" python -c '
+        import importlib.util, opportunity.main, psycopg, pandas, yaml
+        from pathlib import Path
+        assert importlib.util.find_spec("bizplan") is None
+        assert sorted(p.name for p in Path("opportunity/migrations").glob("*.sql"))'
+        docker run --rm --entrypoint git "$IMAGE" --version
+    secrets: inherit

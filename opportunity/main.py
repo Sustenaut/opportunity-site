@@ -10,7 +10,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from integrations.calls import health
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
@@ -62,9 +63,18 @@ async def _form(request: Request) -> dict[str, str]:
     return {k: v[0] for k, v in parse_qs((await request.body()).decode(), keep_blank_values=True).items()}
 
 
+@app.get("/livez")
+def livez():
+    return {"ok": True}
+
+
+# Only what no page can do without counts: its database. GitHub isn't checked, so an
+# outage there doesn't make the site unready; a page says what it couldn't do.
 @app.get("/healthz")
 def healthz():
-    return {"ok": True}
+    h = health([store.check(Services.store)], {})
+    return JSONResponse({"ok": h.healthy, "unhealthy": [c.plugin for c in h.unhealthy]},
+                        status_code=200 if h.healthy else 503)
 
 
 # --- Reading -----------------------------------------------------------------
