@@ -12,23 +12,23 @@ permissions:
 jobs:
   checks:
     name: ci
-    uses: Sustenaut/pubkit/.github/workflows/job-service-checks.yml@c7785ba2f32bd5c5a78053e9bfeaa1f966ae36f1 # v0.30.0
+    uses: Sustenaut/pubkit/.github/workflows/job-service-checks.yml@0c1f1c3ff98315c6eabad6b58ba9fad79374572a # v0.31.0
     with: {"shellcheck": "with-secrets *.sh backups/pg-backup scripts/*.sh"}
 
   terraform:
     name: ci
-    uses: Sustenaut/pubkit/.github/workflows/job-service-terraform.yml@c7785ba2f32bd5c5a78053e9bfeaa1f966ae36f1 # v0.30.0
+    uses: Sustenaut/pubkit/.github/workflows/job-service-terraform.yml@0c1f1c3ff98315c6eabad6b58ba9fad79374572a # v0.31.0
     with: {"terraform-dir": "infra"}
 
   tests:
     name: ci
-    uses: Sustenaut/pubkit/.github/workflows/job-service-tests.yml@c7785ba2f32bd5c5a78053e9bfeaa1f966ae36f1 # v0.30.0
+    uses: Sustenaut/pubkit/.github/workflows/job-service-tests.yml@0c1f1c3ff98315c6eabad6b58ba9fad79374572a # v0.31.0
     with: {"setup": "python -m venv .venv && .venv/bin/pip install --quiet -r requirements.lock", "test": ".venv/bin/python -m pytest -q"}
 
   sonar:
     name: ci
     needs: [tests]
-    uses: Sustenaut/pubkit/.github/workflows/job-sonar.yml@c7785ba2f32bd5c5a78053e9bfeaa1f966ae36f1 # v0.30.0
+    uses: Sustenaut/pubkit/.github/workflows/job-sonar.yml@0c1f1c3ff98315c6eabad6b58ba9fad79374572a # v0.31.0
     with: {"reports": "sonar.python.coverage.reportPaths=*.xml sonar.javascript.lcov.reportPaths=lcov.info"}
     secrets: { SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}' }
 

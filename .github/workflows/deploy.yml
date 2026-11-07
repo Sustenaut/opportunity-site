@@ -1,10 +1,10 @@
-# Build and deploy the opportunity site (opportunity.sustenaut.eu) on each merge
-# to main, or by hand, with pubkit's k8s-deploy.yml (pubkit's README, "Deploying a
-# service to k3s"). The image goes to GitHub's container registry and holds no
-# cards and no bizplan: the site reads both from its checkout of business-plan.
-# Then the manifests in k8s/, rendered with that image, go to the Sustenaut k3s
-# server (shared-infra's infra/hetzner.tf) over SSH and the tailnet, where the
-# deploy key can only run sustenaut-deploy: apply in namespace opportunity and wait.
+# Build and deploy the opportunity site (opportunity.sustenaut.eu) once CI passes on a
+# merge to main, or by hand, with pubkit's k8s-deploy.yml (pubkit's README, "Deploying
+# a service to k3s"). The image goes to GitHub's container registry and holds no cards
+# and no bizplan: the site reads both from its checkout of business-plan. Then the
+# manifests in k8s/, rendered with that image, go to the Sustenaut k3s server
+# (shared-infra's infra/hetzner.tf) over SSH and the tailnet, where the deploy key can
+# only run sustenaut-deploy: apply in namespace opportunity and wait.
 #
 # Needs the same secrets and variables as Sustenaut/auth's auth.yml
 # (Sustenaut/auth's README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
@@ -12,17 +12,19 @@
 name: deploy
 
 on:
-  push:
-    branches: [main]
+  # Once CI (main.yml) has passed on a merge to main, never beside it; k8s-deploy's
+  # ready job also waits for the integrations check on that commit.
+  workflow_run: { workflows: [main], types: [completed], branches: [main] }
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
 jobs:
   deploy:
-    uses: Sustenaut/pubkit/.github/workflows/k8s-deploy.yml@c7785ba2f32bd5c5a78053e9bfeaa1f966ae36f1 # v0.30.0
+    uses: Sustenaut/pubkit/.github/workflows/k8s-deploy.yml@0c1f1c3ff98315c6eabad6b58ba9fad79374572a # v0.31.0
     with:
       image: ghcr.io/sustenaut/sustenaut-opportunity
       deploys: k8s opportunity
