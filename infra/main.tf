@@ -31,7 +31,7 @@ module "backups" {
 # Sustenaut/pg-backup's module: the bucket, its add-and-read account (which may delete only its
 # own upload chunks), and deletion by age. `./backups/pg-backup setup-secrets` makes the keys.
 module "wal" {
-  source = "github.com/Sustenaut/pg-backup//terraform/wal-archive?ref=v0.1.0"
+  source = "github.com/Sustenaut/pg-backup//terraform/wal-archive?ref=v0.2.0"
 
   project              = local.gcp.project
   region               = local.gcp.region
