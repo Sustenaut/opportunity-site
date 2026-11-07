@@ -24,3 +24,8 @@ components:
 images:
   - name: ghcr.io/sustenaut/sustenaut-opportunity
     newTag: unset
+  # Sustenaut/pg-backup's release: PostgreSQL 16.14 with WAL-G. Move it with backups/pg-backup's
+  # version and infra/'s module ref.
+  - name: ghcr.io/sustenaut/pg-backup
+    newTag: 0.1.0-pg16
+    digest: sha256:1cdc1121515180f8e744fc36a343b546e89b77cb28bacaaddb1f3666f4048b09
