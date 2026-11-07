@@ -28,14 +28,16 @@
       "paths": [
         ".github/workflows/deploy.yml",
         "k8s/app.yaml",
-        "k8s/kustomization.yaml"
+        "k8s/kustomization.yaml",
+        "k8s/postgres.yaml"
       ],
       "mode": "required"
     },
     {
       "plugin": "google.cloud",
       "paths": [
-        "k8s/backup.yaml"
+        "k8s/backup.yaml",
+        "scripts/go-live-wal.sh"
       ],
       "mode": "required"
     },
