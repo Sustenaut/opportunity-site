@@ -153,7 +153,7 @@ log says so; the pod then stays unready.
 
 | When | Command |
 |---|---|
-| Monthly, and after any change to the backups or PostgreSQL | `./backups/pg-backup drill` |
+| Monthly, and after any change to the backups or PostgreSQL (right after a merge: `drill --wait`) | `./backups/pg-backup drill` |
 | To look at the database as it was at a moment, in a scratch namespace | `./backups/pg-backup restore --to "2026-11-05 14:32:00+00"` |
 | To put that restore back as the live database | `./backups/pg-backup promote opportunity-restore-<the namespace>` |
 | Once, and after a rebuild: the archive's keys, into Bitwarden and the cluster | `./backups/pg-backup setup-secrets` |

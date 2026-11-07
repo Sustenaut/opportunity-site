@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Sustenaut/pg-backup/v0.1.0/src/pg_backup/pg-backup.schema.json",
+  "$schema": "https://raw.githubusercontent.com/Sustenaut/pg-backup/v0.2.0/src/pg_backup/pg-backup.schema.json",
   "server": "sustenaut",
   "namespace": "opportunity",
   "statefulset": "postgres",
