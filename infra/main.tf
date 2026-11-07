@@ -23,3 +23,22 @@ module "backups" {
   account_description  = "Writes the opportunity site's nightly PostgreSQL dumps from the Hetzner k3s server into the opportunity-backups bucket."
   create_key           = false
 }
+
+# Where every change to the site's database goes, as it is made: PostgreSQL's write-ahead log,
+# archived by WAL-G within a minute (k8s/postgres.yaml), with a base backup each night, so the
+# database can be restored to any moment in the last 14 days. The nightly dumps above stay as
+# a second copy that does not depend on PostgreSQL's version or on WAL-G.
+# Sustenaut/pg-backup's module: the bucket, its add-and-read account (which may delete only its
+# own upload chunks), and deletion by age. `./backups/pg-backup setup-secrets` makes the keys.
+module "wal" {
+  source = "github.com/Sustenaut/pg-backup//terraform/wal-archive?ref=v0.1.0"
+
+  project              = local.gcp.project
+  region               = local.gcp.region
+  bucket               = "${local.gcp.project}-opportunity-wal"
+  prefix               = "opportunity"
+  account_id           = "sustenaut-opportunity-wal"
+  account_display_name = "Sustenaut opportunity WAL archive"
+  account_description  = "WAL-G on the Hetzner k3s server: archives the opportunity site's write-ahead log and nightly base backups into the opportunity-wal bucket. Creates and reads; deletes only its own upload chunks."
+  role_id              = "walChunkDeleteOpportunity" # auth's archive has walChunkDelete
+}

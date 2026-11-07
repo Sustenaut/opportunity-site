@@ -91,7 +91,7 @@ like auth (Sustenaut/auth):
 | oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` is open without sign-in. |
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
 | Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubkit.json`. |
-| Backups | `k8s/backup.yaml`: a nightly `pg_dump` to the bucket `sustenaut-opportunity-backups` (`infra/main.tf`, kept 30 days). |
+| Backups | Two layers, by [Sustenaut/pg-backup](https://github.com/Sustenaut/pg-backup): the write-ahead log archived by WAL-G within a minute, with a base backup each night, to `sustenaut-opportunity-wal` (`infra/main.tf`'s `module "wal"`, restorable to any moment in the last 14 days); and `k8s/backup.yaml`'s nightly `pg_dump` to `sustenaut-opportunity-backups` (kept 30 days). `backups/pg-backup.json` holds the site's settings, and `./backups/pg-backup` runs the pinned release. |
 | Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
 | Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like Sustenaut/auth's `auth.yml`. |
 
@@ -149,7 +149,16 @@ If oauth2-proxy can't reach `https://auth.sustenaut.eu` from inside the cluster 
 fetches the issuer's discovery document at start, and exchanges codes there), its
 log says so; the pod then stays unready.
 
-Restore a dump (as for auth):
+**Backups:** run from the repository root, signed in to Sustenaut's tailnet:
+
+| When | Command |
+|---|---|
+| Monthly, and after any change to the backups or PostgreSQL | `./backups/pg-backup drill` |
+| To look at the database as it was at a moment, in a scratch namespace | `./backups/pg-backup restore --to "2026-11-05 14:32:00+00"` |
+| To put that restore back as the live database | `./backups/pg-backup promote opportunity-restore-<the namespace>` |
+| Once, and after a rebuild: the archive's keys, into Bitwarden and the cluster | `./backups/pg-backup setup-secrets` |
+
+pg-backup's README says what each does. Or restore a dump:
 
 ```sh
 gcloud storage cp gs://sustenaut-opportunity-backups/opportunity-<when>.dump .
