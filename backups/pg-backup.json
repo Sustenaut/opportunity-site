@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Sustenaut/pg-backup/v0.1.0/src/pg_backup/pg-backup.schema.json",
+  "server": "sustenaut",
+  "namespace": "opportunity",
+  "statefulset": "postgres",
+  "container": "postgres",
+  "database": "opportunity",
+  "user": "opportunity",
+  "wal": {
+    "secret": "opportunity-wal",
+    "bucket": "sustenaut-opportunity-wal",
+    "prefix": "opportunity",
+    "account": "sustenaut-opportunity-wal@sustenaut.iam.gserviceaccount.com",
+    "gcs_key_secret": "opportunity-wal-gcs-key",
+    "encryption_key_secret": "opportunity-wal-key"
+  },
+  "dump": {"cronjob": "backup", "bucket": "sustenaut-opportunity-backups"},
+  "app": {"deployment": "app", "selector": "app=opportunity"},
+  "check": {
+    "query": "select 'comments ' || count(*) from comments union all select 'reviews ' || count(*) from reviews union all select 'schema_migrations ' || count(*) from schema_migrations",
+    "required": ["comments", "reviews", "schema_migrations"]
+  }
+}
