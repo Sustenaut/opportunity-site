@@ -89,61 +89,89 @@ like auth (Sustenaut/auth):
 | The app | `k8s/app.yaml`: one replica, image `ghcr.io/sustenaut/sustenaut-opportunity` (no cards, no bizplan), the checkout in an emptyDir. No ingress points at it, and `k8s/admin/network-policy.yaml` lets only oauth2-proxy reach it. |
 | PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
 | oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` is open without sign-in. |
-| Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (`register-client.sh`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
+| Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (the deploy walk's `auth.sign-in-client`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
 | Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubkit.json`. |
 | Backups | Two layers, by [Sustenaut/pg-backup](https://github.com/Sustenaut/pg-backup): the write-ahead log archived by WAL-G within a minute, with a base backup each night, to `sustenaut-opportunity-wal` (`infra/main.tf`'s `module "wal"`, restorable to any moment in the last 14 days); and `k8s/backup.yaml`'s nightly `pg_dump` to `sustenaut-opportunity-backups` (kept 30 days). `backups/pg-backup.json` holds the site's settings, and `./backups/pg-backup` runs the pinned release. |
-| Secrets | `push-secrets.sh` puts in the Secret `opportunity-secrets` and the network policy, over the admin key; `register-client.sh` the Secret `opportunity-oidc`. |
-| Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity`, like Sustenaut/auth's `auth.yml`. |
+| Secrets | The deploy walk ("Deploying" below) puts in the Secrets `opportunity-secrets`, `opportunity-oidc` and `opportunity-wal` and the network policy, over the admin key. |
+| Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity` once `DEPLOY_OPPORTUNITY` is `on`, like Sustenaut/auth's `auth.yml`. |
 
-**Who may use the site** is the role `opportunity` on the team access page, https://auth.sustenaut.eu/realms/team/access (Sustenaut/auth's `README.md`): invite, tick, remove. No Terraform, no secrets pushed, no restarts. A `controller` has every role and may resolve any thread. `register-client.sh` declares the role.
+**Who may use the site** is the role `opportunity` on the team access page, https://auth.sustenaut.eu/realms/team/access (Sustenaut/auth's `README.md`): invite, tick, remove. No Terraform, no secrets pushed, no restarts. A `controller` has every role and may resolve any thread. The walk's `auth.sign-in-client` declares the role.
 
 **A change reaches the site at the person's next request.** On each request the app compares the realm's hash of who holds what with the one stored for that person, and only if it differs asks userinfo (`opportunity/access_check.py`, a copy of Sustenaut/auth's; its `README.md`, "Checking access on each request"). Nothing runs between requests, so a site nobody is using asks nothing. If auth.sustenaut.eu can't be reached, people go on reading and changes are refused.
 
-This needs Sustenaut/auth's access-state endpoint deployed, with its key (`push-secrets.sh` there). When this version first deploys, deploy first and run `push-secrets.sh` after it, which takes `team`, `team-emails` and `owner` out of the Secret: a pod of the version before needs them to start. Everyone on the site must hold `opportunity` before then (Sustenaut/auth's `import-team-access.sh`).
+This needs Sustenaut/auth's access-state endpoint deployed, with its key (`push-secrets.sh` there).
 
-### Going live
+## Deploying
 
-How the site went live, in order; the same steps stand up a new server. Terraform runs in a
-shared-infra checkout beside this one (`SHARED_INFRA` names another path), with its `./with-secrets`. Steps 1 to 7 of Sustenaut/auth's `README.md`,
-"Deploying", are done first (the server, the tailnet, the deploy secrets).
+`.github/workflows/deploy.yml` builds the image on each merge to main, once CI has
+passed, and applies `k8s/` to namespace `opportunity` with pubkit's `k8s-deploy.yml`,
+once `DEPLOY_OPPORTUNITY` is `on`.
 
-1. **GitHub App** (owned by the Sustenaut org) on Sustenaut/business-plan: Repository permissions *Contents: Read
-   and write* and *Pull requests: Read and write*, no webhook. Install it on
-   business-plan only and generate a private key. Note the App ID and the
-   installation ID (from the installation's URL).
-2. **Bitwarden** (project Sustenaut): `opportunity-db-password` (random),
-   `opportunity-cookie-secret` (`openssl rand -base64 32 | tr -- '+/' '-_'`),
-   `opportunity-github-app-id`, `opportunity-github-app-key` (the PEM),
-   `opportunity-github-installation-id`. No sign-in
-   client secret: step 6 registers it. For the team realm's email: the alias
-   `noreply@sustenaut.eu` on the mailbox.org account whose app password is already
-   `auth-smtp-password`.
-3. `./with-secrets terraform -chdir=infra apply` here: the backup bucket and its account.
-   In shared-infra, the same: the DNS record for opportunity.sustenaut.eu, and the
-   `auth_team` output. Then the account's key, with your Bitwarden write token:
-   `./pubkit service-account-key create --account=sustenaut-opportunity-backup@sustenaut.iam.gserviceaccount.com --secret=opportunity-backup-gcs-key`.
-4. **The team realm**: run the `auth` workflow (or merge), so the realm job creates
-   the realm; then `SUSTENAUT_SERVER=sustenaut ./with-secrets ./invite-team.sh` in a Sustenaut/auth checkout. Everyone in
-   `var.team` and the registrant (`var.team_registrant`, default `admin@sustenaut.eu`)
-   get an invitation; set up the registrant's passkey from it (or use a code later).
-   Then, once, `SUSTENAUT_SERVER=sustenaut ./with-secrets ./import-team-access.sh` there: everyone
-   in `var.team` gets the role `opportunity` (and the other services'), David `controller`.
-5. Make the namespace on the running server, once: `ssh root@sustenaut sustenaut-app
-   opportunity`; then `./with-secrets ./push-secrets.sh`.
-6. **Register the sign-in client**: `./register-client.sh`. Sign in at
-   the link it prints as the registrant and confirm. It writes the approval record into
-   shared-infra's `infra/auth-approvals.json`: commit that (a PR there), merge,
-   `./with-secrets terraform -chdir=infra apply`, and run `register-client.sh` again
-   (sign in again). Once auth.sustenaut.eu sees the record (DNSSEC-validated, so the
-   sustenaut.eu DNSSEC move must be live), the client is issued and put in the Secret
-   `opportunity-oidc`.
-7. **First deploy**: merge (or run the **deploy** workflow by hand). Then
-   open https://opportunity.sustenaut.eu and sign in with your passkey or a code. A
-   deploy before step 6 leaves oauth2-proxy waiting for the Secret `opportunity-oidc`
-   (its pod doesn't start, the workflow's wait times out); run the workflow again after
-   step 6.
-8. The ghcr package `sustenaut-opportunity` is **public** and holds no private code, so the
-   cluster pulls it without a secret. Give this repository write access under *Manage Actions access*.
+pubkit.json's `deploy` block lists everything else the deployment needs, and pubkit's
+deploy walk checks each need and makes what it can. `pg.database` is
+[Sustenaut/pg-backup](https://github.com/Sustenaut/pg-backup)'s type: `deploy.providers`
+pins its release, and `./pubkit` runs with it. To take the site live, or bring it back in
+step, from a checkout of this repository with Sustenaut/shared-infra and Sustenaut/auth
+checked out beside it, on a machine on the admin tailnet, signed in to `gh` and `gcloud`:
+
+```sh
+./with-secrets ./pubkit deploy walk --fulfil --server sustenaut --zones ../shared-infra/pubkit.json
+```
+
+It checks every need, prints the plan, and waits for a typed `yes`; then it makes each
+missing need it can, over the admin channel (`ssh root@sustenaut`), and checks it again.
+Every run can run again: what is ready is left alone. In order:
+
+| Need | What the walk does |
+|---|---|
+| the namespace `opportunity` | the server's `sustenaut-app`, which makes it and its deploy identity |
+| `bitwarden.generated` `opportunity-cookie-secret` | oauth2-proxy's cookie secret: a new one of its shape, written to Bitwarden, when it is missing or misshapen |
+| `gcp.service-account-key` `opportunity-backup-gcs-key` | the nightly dump's key for `sustenaut-opportunity-backup` (`infra/`'s account): made and written to Bitwarden when it is missing or not one of the account's live keys |
+| the Secret `opportunity-secrets` | made from `opportunity-db-password`, the cookie secret, the GitHub App's three values and the backup key; the app and oauth2-proxy restarted |
+| `auth.sign-in-client` | sustenaut.eu's team-site client in the team realm, role `opportunity`: the approval record written into shared-infra's `infra/auth-approvals.json` when auth.sustenaut.eu wants one, and once the client is issued, the Secret `opportunity-oidc` made from it on the server |
+| `k8s.manifests` | `k8s/admin/network-policy.yaml` applied: only oauth2-proxy's pods may reach the app, and only the app and the dump the database |
+| `pg.database` | the WAL archive's two keys in Bitwarden and the Secret `opportunity-wal`, as `./backups/pg-backup setup-secrets` makes them; then PostgreSQL, the archive and the last base backup checked |
+| `DEPLOY_OPPORTUNITY` and the rollout | the gate on, once everything before it is ready, and `deploy.yml` run and waited for |
+| `service.health` | `https://opportunity.sustenaut.eu/healthz` answers |
+
+A new cookie secret, backup key or archive key wants a Bitwarden token that may write:
+the walk asks for it once, at a hidden prompt, and keeps it only in its process. An
+approval record is a change to shared-infra: commit it there, merge, apply, and run the
+walk again.
+
+Some needs it only checks, and says what a person does:
+
+- **The values in Bitwarden** (project Sustenaut): `opportunity-db-password` (random,
+  and kept: PostgreSQL holds it), and the GitHub App's `opportunity-github-app-id`,
+  `opportunity-github-app-key` (the PEM) and `opportunity-github-installation-id`. The
+  App is owned by the Sustenaut org and installed on Sustenaut/business-plan only, with
+  *Contents* and *Pull requests: Read and write* and no webhook.
+- **storage's tenants** in Sustenaut/storage's `tenants.json`: `opportunity` (the
+  threads' files, which `k8s:opportunity/app` reads and writes) and
+  `calls-opportunity-site` (the call log buffer the app writes). When one is missing,
+  the fix is the entry to add there.
+- **Its entries in other services' variables**: `opportunity-site` in integrations'
+  `INGEST_DATASETS`, and `opportunity_site.app` in observability's
+  `OBSERVABILITY_SENDERS`.
+- **The DNS record** for `opportunity.sustenaut.eu`, in shared-infra's hosting block.
+- **storage itself** (`upstream`).
+- **The backup drill** (`pg.database`): `./backups/pg-backup drill --wait`, below, until
+  pg-backup records the drill where the walk can read it.
+
+`./pubkit deploy walk` without `--fulfil` (or `deploy check`) changes nothing, and
+`./pubkit deploy walk --offline` checks only the files. `.github/workflows/deploy-check.yml`
+walks the deployment every 30 minutes, read-only, with the deploy key, and writes the walk
+to storage's `plane` tenant; it fails when a need is missing, drift or blocked.
+
+### A new server
+
+Before the walk: steps 1 to 7 of Sustenaut/auth's `README.md`, "Deploying" (the server,
+the tailnet, the deploy secrets); `./with-secrets terraform -chdir=infra apply` here (the
+backup and WAL buckets and their accounts) and in shared-infra (the DNS record and the
+`auth_team` output); and the team realm, with everyone in `var.team` holding the role
+`opportunity` (Sustenaut/auth's `invite-team.sh` and `import-team-access.sh`). The ghcr
+package `sustenaut-opportunity` is **public** and holds no private code, so the cluster
+pulls it without a secret; give this repository write access under *Manage Actions access*.
 
 If oauth2-proxy can't reach `https://auth.sustenaut.eu` from inside the cluster (it
 fetches the issuer's discovery document at start, and exchanges codes there), its
@@ -156,7 +184,7 @@ log says so; the pod then stays unready.
 | Monthly, and after any change to the backups or PostgreSQL (right after a merge: `drill --wait`) | `./backups/pg-backup drill` |
 | To look at the database as it was at a moment, in a scratch namespace | `./backups/pg-backup restore --to "2026-11-05 14:32:00+00"` |
 | To put that restore back as the live database | `./backups/pg-backup promote opportunity-restore-<the namespace>` |
-| Once, and after a rebuild: the archive's keys, into Bitwarden and the cluster | `./backups/pg-backup setup-secrets` |
+| Once, and after a rebuild: the archive's keys, into Bitwarden and the cluster | the deploy walk above (`pg.database`), or `./backups/pg-backup setup-secrets` |
 
 pg-backup's README says what each does. Or restore a dump:
 

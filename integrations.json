@@ -8,11 +8,17 @@
       "mode": "required"
     },
     {
+      "plugin": "github.actions-oidc",
+      "paths": [
+        ".github/workflows/deploy-check.yml"
+      ],
+      "mode": "required"
+    },
+    {
       "plugin": "github.app-token",
       "paths": [
         "k8s/app.yaml",
-        "opportunity/github.py",
-        "push-secrets.sh"
+        "opportunity/github.py"
       ],
       "mode": "required"
     },
@@ -36,8 +42,7 @@
     {
       "plugin": "google.cloud",
       "paths": [
-        "k8s/backup.yaml",
-        "scripts/go-live-wal.sh"
+        "k8s/backup.yaml"
       ],
       "mode": "required"
     },
