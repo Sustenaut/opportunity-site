@@ -4,7 +4,7 @@
     "with": {
       "setup": "python -m venv .venv && .venv/bin/pip install --quiet -r requirements.lock",
       "test": ".venv/bin/python -m pytest -q",
-      "shellcheck": "with-secrets *.sh backups/pg-backup scripts/*.sh",
+      "shellcheck": "with-secrets backups/pg-backup",
       "terraform-dir": "infra"
     }
   },
@@ -26,5 +26,149 @@
         }
       }
     }
+  },
+  "deploy": {
+    "namespace": "opportunity",
+    "host": "opportunity.sustenaut.eu",
+    "workflow": "deploy.yml",
+    "gate": "DEPLOY_OPPORTUNITY",
+    "providers": [
+      {
+        "distribution": "pg-backup",
+        "wheel": "https://github.com/Sustenaut/pg-backup/releases/download/v0.2.1/pg_backup-0.2.1-py3-none-any.whl",
+        "sha256": "1150437f87dfd267526db5f138f66d50e8168e9fbad4c83ff87cb2ad28141c5e"
+      }
+    ],
+    "needs": [
+      {
+        "type": "bitwarden.secret",
+        "name": "opportunity-db-password",
+        "secret": {
+          "name": "opportunity-secrets",
+          "key": "db-password"
+        }
+      },
+      {
+        "type": "bitwarden.generated",
+        "name": "opportunity-cookie-secret",
+        "shape": "oauth2-proxy-cookie",
+        "secret": {
+          "name": "opportunity-secrets",
+          "key": "cookie-secret"
+        }
+      },
+      {
+        "type": "bitwarden.secret",
+        "name": "opportunity-github-app-id",
+        "secret": {
+          "name": "opportunity-secrets",
+          "key": "github-app-id"
+        }
+      },
+      {
+        "type": "bitwarden.secret",
+        "name": "opportunity-github-app-key",
+        "secret": {
+          "name": "opportunity-secrets",
+          "key": "github-app-key"
+        }
+      },
+      {
+        "type": "bitwarden.secret",
+        "name": "opportunity-github-installation-id",
+        "secret": {
+          "name": "opportunity-secrets",
+          "key": "github-installation-id"
+        }
+      },
+      {
+        "type": "gcp.service-account-key",
+        "account": "sustenaut-opportunity-backup",
+        "project": "sustenaut",
+        "bitwarden": "opportunity-backup-gcs-key",
+        "secret": {
+          "name": "opportunity-secrets",
+          "key": "backup-gcs-key",
+          "decode": "base64"
+        }
+      },
+      {
+        "type": "auth.sign-in-client",
+        "realm": "team",
+        "role": "opportunity",
+        "auth": "https://auth.sustenaut.eu/realms/team",
+        "domain": "sustenaut.eu",
+        "host": "opportunity.sustenaut.eu",
+        "state": "/root/.config/sustenaut-auth/team-sustenaut.eu",
+        "client_name": "sustenaut.eu team sites",
+        "register_app": "../auth/register-app.py",
+        "approvals": "../shared-infra/infra/auth-approvals.json",
+        "access": "https://auth.sustenaut.eu/realms/team/access",
+        "secret": {
+          "name": "opportunity-oidc"
+        }
+      },
+      {
+        "type": "k8s.manifests",
+        "path": "k8s/admin/network-policy.yaml"
+      },
+      {
+        "type": "pg.database"
+      },
+      {
+        "type": "k8s.secret",
+        "name": "opportunity-wal",
+        "keys": [
+          "gcs-key.json",
+          "libsodium-key"
+        ],
+        "after": [
+          "pg.database:postgres"
+        ]
+      },
+      {
+        "type": "upstream",
+        "name": "storage",
+        "health": "https://storage.sustenaut.eu/"
+      },
+      {
+        "type": "storage.tenant",
+        "storage": "Sustenaut/storage",
+        "url": "https://storage.sustenaut.eu",
+        "name": "opportunity",
+        "read": [
+          "k8s:opportunity/app"
+        ],
+        "write": [
+          "k8s:opportunity/app"
+        ],
+        "private": true
+      },
+      {
+        "type": "storage.tenant",
+        "storage": "Sustenaut/storage",
+        "url": "https://storage.sustenaut.eu",
+        "name": "calls-opportunity-site",
+        "write": [
+          "k8s:opportunity/app"
+        ],
+        "private": true,
+        "inbox": true
+      },
+      {
+        "type": "github.variable-entry",
+        "repository": "Sustenaut/integrations",
+        "variable": "INGEST_DATASETS",
+        "path": "/opportunity-site",
+        "value": "calls_opportunity_site"
+      },
+      {
+        "type": "github.variable-entry",
+        "repository": "Sustenaut/observability",
+        "variable": "OBSERVABILITY_SENDERS",
+        "path": "/opportunity_site/app",
+        "value": "always"
+      }
+    ]
   }
 }

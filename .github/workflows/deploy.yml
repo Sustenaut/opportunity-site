@@ -4,7 +4,8 @@
 # and no bizplan: the site reads both from its checkout of business-plan. Then the
 # manifests in k8s/, rendered with that image, go to the Sustenaut k3s server
 # (shared-infra's infra/hetzner.tf) over SSH and the tailnet, where the deploy key can
-# only run sustenaut-deploy: apply in namespace opportunity and wait.
+# only run sustenaut-deploy: apply in namespace opportunity and wait, once
+# DEPLOY_OPPORTUNITY is on, which the deploy walk sets once every need before it is ready.
 #
 # Needs the same secrets and variables as Sustenaut/auth's auth.yml
 # (Sustenaut/auth's README.md, "Deploying"). Without SUSTENAUT_SERVER the image is
@@ -24,10 +25,10 @@ permissions:
 
 jobs:
   deploy:
-    uses: Sustenaut/pubkit/.github/workflows/k8s-deploy.yml@0c1f1c3ff98315c6eabad6b58ba9fad79374572a # v0.31.0
+    uses: Sustenaut/pubkit/.github/workflows/k8s-deploy.yml@01c2711869ce046ec875edee83e575b955cfbabf # v0.31.3
     with:
       image: ghcr.io/sustenaut/sustenaut-opportunity
-      deploys: k8s opportunity
+      deploys: k8s opportunity DEPLOY_OPPORTUNITY
       # The image must start, hold what the app imports and what bizplan needs,
       # and hold no bizplan: that comes from the checkout at runtime.
       check: |

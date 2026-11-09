@@ -3,9 +3,9 @@
 # runs on the Sustenaut k3s server, whose Terraform, like the site's DNS record, is
 # Sustenaut/shared-infra's. This stack does not read that state.
 #
-# The account's key is not here, so no state holds it: `pubkit service-account-key
-# create` puts it in Bitwarden as opportunity-backup-gcs-key, and push-secrets.sh gives
-# it to the cluster.
+# The account's key is not here, so no state holds it: the deploy walk's
+# gcp.service-account-key makes it, puts it in Bitwarden as opportunity-backup-gcs-key,
+# and gives it to the cluster.
 
 locals {
   gcp = jsondecode(file("${path.module}/../pubkit.json")).hosting.providers["google-cloud"]
