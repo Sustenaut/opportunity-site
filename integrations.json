@@ -8,13 +8,6 @@
       "mode": "required"
     },
     {
-      "plugin": "github.actions-oidc",
-      "paths": [
-        ".github/workflows/deploy-check.yml"
-      ],
-      "mode": "required"
-    },
-    {
       "plugin": "github.app-token",
       "paths": [
         "k8s/app.yaml",
