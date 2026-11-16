@@ -126,15 +126,15 @@ Every run can run again: what is ready is left alone. In order:
 |---|---|
 | the namespace `opportunity` | the server's `sustenaut-app`, which makes it and its deploy identity |
 | `bitwarden.generated` `opportunity-cookie-secret` | oauth2-proxy's cookie secret: a new one of its shape, written to Bitwarden, when it is missing or misshapen |
-| `gcp.service-account-key` `opportunity-backup-gcs-key` | the nightly dump's key for `sustenaut-opportunity-backup` (`infra/`'s account): made and written to Bitwarden when it is missing or not one of the account's live keys |
-| the Secret `opportunity-secrets` | made from `opportunity-db-password`, the cookie secret, the GitHub App's three values and the backup key; the app and oauth2-proxy restarted |
+| `gcp.workload-identity` `backup` | that the nightly dump's ServiceAccount may act as `sustenaut-opportunity-backup` (`infra/`'s account) through the `services` Workload Identity pool, so the upload needs no key (`k8s/google-credential.yaml`); the grant is Terraform's (shared-infra's `infra/services-identity.tf`) and only proposed |
+| the Secret `opportunity-secrets` | made from `opportunity-db-password`, the cookie secret and the GitHub App's three values; the app and oauth2-proxy restarted |
 | `auth.sign-in-client` | sustenaut.eu's team-site client in the team realm, role `opportunity`: the approval record written into shared-infra's `infra/auth-approvals.json` when auth.sustenaut.eu wants one, and once the client is issued, the Secret `opportunity-oidc` made from it on the server |
 | `k8s.manifests` | `k8s/admin/network-policy.yaml` applied: only oauth2-proxy's pods may reach the app, and only the app and the dump the database |
 | `pg.database` | the WAL archive's two keys in Bitwarden and the Secret `opportunity-wal`, as `./backups/pg-backup setup-secrets` makes them; then PostgreSQL, the archive and the last base backup checked |
 | `DEPLOY_OPPORTUNITY` and the rollout | the gate on, once everything before it is ready, and `deploy.yml` run and waited for |
 | `service.health` | `https://opportunity.sustenaut.eu/healthz` answers |
 
-A new cookie secret, backup key or archive key wants a Bitwarden token that may write:
+A new cookie secret or archive key wants a Bitwarden token that may write:
 the walk asks for it once, at a hidden prompt, and keeps it only in its process. An
 approval record is a change to shared-infra: commit it there, merge, apply, and run the
 walk again.
