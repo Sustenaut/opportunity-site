@@ -11,6 +11,7 @@ kind: Kustomization
 namespace: opportunity
 resources:
   - service-accounts.yaml
+  - google-credential.yaml
   - postgres.yaml
   - app.yaml
   - oauth2-proxy.yaml

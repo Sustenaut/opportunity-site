@@ -35,7 +35,8 @@
     {
       "plugin": "google.cloud",
       "paths": [
-        "k8s/backup.yaml"
+        "k8s/backup.yaml",
+        "k8s/google-credential.yaml"
       ],
       "mode": "required"
     },
