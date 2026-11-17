@@ -90,7 +90,7 @@ like auth (Sustenaut/auth):
 | PostgreSQL 16 | `k8s/postgres.yaml`, on the server's data volume; only the app and the backup job may reach it. |
 | oauth2-proxy | `k8s/oauth2-proxy.yaml`: sign-in with the team realm at auth.sustenaut.eu (`keycloak-oidc`, issuer `https://auth.sustenaut.eu/realms/team`, PKCE S256: a passkey or an emailed code), letting in only people with the role `opportunity` (`--oidc-groups-claim=access --allowed-group=opportunity`, from the `access` claim Sustenaut/auth's team realm puts in the token), and refreshing every 4 minutes (`--cookie-refresh=4m`), which also keeps the access token valid. It passes the account's verified email on in `X-Forwarded-Email` and that token in `X-Forwarded-Access-Token`, the only identity headers the app trusts. `/healthz` is open without sign-in. |
 | Sign-in client | sustenaut.eu's client in the team realm, registered by sustenaut.eu itself and approved by a DNS record (the deploy walk's `auth.sign-in-client`, Sustenaut/auth's `README.md`). It is kept on the server and in the Secret `opportunity-oidc`, nowhere else. |
-| Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubkit.json`. |
+| Ingress | `k8s/ingress.yaml`: opportunity.sustenaut.eu to oauth2-proxy, through Traefik with Let's Encrypt. The DNS record is the `opportunity` site in shared-infra's `pubrules.json`. |
 | Backups | Two layers, by [Sustenaut/pg-backup](https://github.com/Sustenaut/pg-backup): the write-ahead log archived by WAL-G within a minute, with a base backup each night, to `sustenaut-opportunity-wal` (`infra/main.tf`'s `module "wal"`, restorable to any moment in the last 14 days); and `k8s/backup.yaml`'s nightly `pg_dump` to `sustenaut-opportunity-backups` (kept 30 days). `backups/pg-backup.json` holds the site's settings, and `./backups/pg-backup` runs the pinned release. |
 | Secrets | The deploy walk ("Deploying" below) puts in the Secrets `opportunity-secrets`, `opportunity-oidc` and `opportunity-wal` and the network policy, over the admin key. |
 | Deploys | `.github/workflows/deploy.yml` builds and pushes the image, then sends the rendered `k8s/` over SSH to `sustenaut-deploy opportunity` once `DEPLOY_OPPORTUNITY` is `on`, like Sustenaut/auth's `auth.yml`. |
@@ -104,18 +104,18 @@ This needs Sustenaut/auth's access-state endpoint deployed, with its key (`push-
 ## Deploying
 
 `.github/workflows/deploy.yml` builds the image on each merge to main, once CI has
-passed, and applies `k8s/` to namespace `opportunity` with pubkit's `k8s-deploy.yml`,
+passed, and applies `k8s/` to namespace `opportunity` with pubrules's `k8s-deploy.yml`,
 once `DEPLOY_OPPORTUNITY` is `on`.
 
-pubkit.json's `deploy` block lists everything else the deployment needs, and pubkit's
+pubrules.json's `deploy` block lists everything else the deployment needs, and pubrules's
 deploy walk checks each need and makes what it can. `pg.database` is
 [Sustenaut/pg-backup](https://github.com/Sustenaut/pg-backup)'s type: `deploy.providers`
-pins its release, and `./pubkit` runs with it. To take the site live, or bring it back in
+pins its release, and `./pubrules` runs with it. To take the site live, or bring it back in
 step, from a checkout of this repository with Sustenaut/shared-infra and Sustenaut/auth
 checked out beside it, on a machine on the admin tailnet, signed in to `gh` and `gcloud`:
 
 ```sh
-./with-secrets ./pubdeploy walk --fulfil --server sustenaut --zones ../shared-infra/pubkit.json
+./with-secrets ./pubdeploy walk --fulfil --server sustenaut --zones ../shared-infra/pubrules.json
 ```
 
 It checks every need, prints the plan, and waits for a typed `yes`; then it makes each
