@@ -13,6 +13,9 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pytest_bdd import scenarios, then
+
+scenarios(str(Path(__file__).resolve().parent / "features" / "opportunity-site.feature"))
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "tests" / "fixtures" / "business-plan"
@@ -82,7 +85,8 @@ def as_user(monkeypatch, email, groups="opportunity"):
 
 # --- Reading -----------------------------------------------------------------
 
-def test_index_lists_every_card_ranked_and_filters_by_kind(site):
+@then("index lists every card ranked and filters by kind")
+def index_lists_every_card_ranked_and_filters_by_kind(site):
     client, *_ = site
     page = client.get("/").text
     opp = cardformat.opp()
@@ -95,7 +99,8 @@ def test_index_lists_every_card_ranked_and_filters_by_kind(site):
     assert all((f"/c/{c['id']}\"" in platform) == (c["kind"] == "platform") for c in cards)
 
 
-def test_card_page_shows_fields_body_and_its_reports(site):
+@then("card page shows fields body and its reports")
+def card_page_shows_fields_body_and_its_reports(site):
     client, *_ = site
     page = client.get("/c/OPP-01").text
     card = cardformat.opp().read(FIXTURE / "opportunities" / "OPP-01.md")
@@ -106,7 +111,8 @@ def test_card_page_shows_fields_body_and_its_reports(site):
     assert 'data-anchor="s:verdict"' in report and "/c/OPP-01" in report
 
 
-def test_card_html_is_shown_as_text_and_script_links_are_dropped():
+@then("card HTML is shown as text and script links are dropped")
+def card_html_is_shown_as_text_and_script_links_are_dropped():
     out, sections = content.render("## Plan\n\n<script>alert(1)</script> [x](javascript:alert(1)) [ok](https://a.eu)")
     assert "<script>" not in out and "&lt;script&gt;" in out
     assert "javascript:" not in out and 'href="https://a.eu"' in out
@@ -115,7 +121,8 @@ def test_card_html_is_shown_as_text_and_script_links_are_dropped():
 
 # --- Comments ----------------------------------------------------------------
 
-def test_comment_on_a_field_reply_and_resolve(site, monkeypatch):
+@then("comment on a field reply and resolve")
+def comment_on_a_field_reply_and_resolve(site, monkeypatch):
     client, s, _, repo = site
     sha = git(repo, "rev-parse", "HEAD")
     r = client.post("/c/OPP-10/comments", data={"anchor": "f:kill_point", "body": "Why March?", "sha": sha},
@@ -140,7 +147,8 @@ def test_comment_on_a_field_reply_and_resolve(site, monkeypatch):
     assert main.Services.store.tally().get("OPP-10") is None
 
 
-def test_author_resolves_own_thread_and_empty_comments_are_refused(site):
+@then("author resolves own thread and empty comments are refused")
+def author_resolves_own_thread_and_empty_comments_are_refused(site):
     client, s, *_ = site
     assert client.post("/r/example-market/comments", data={"body": "  "}, headers=ORIGIN).status_code == 422
     client.post("/r/example-market/comments", data={"anchor": "s:verdict", "body": "Sizes?"},
@@ -150,7 +158,8 @@ def test_author_resolves_own_thread_and_empty_comments_are_refused(site):
     assert s.comment(1).resolved_by == ME
 
 
-def test_posts_from_elsewhere_are_refused(site):
+@then("posts from elsewhere are refused")
+def posts_from_elsewhere_are_refused(site):
     client, s, *_ = site
     assert client.post("/c/OPP-10/comments", data={"body": "hi"}).status_code == 403
     assert client.post("/c/OPP-10/comments", data={"body": "hi"},
@@ -160,7 +169,8 @@ def test_posts_from_elsewhere_are_refused(site):
 
 # --- Reviews -----------------------------------------------------------------
 
-def test_reviews_say_when_they_are_on_an_older_version(site):
+@then("reviews say when they are on an older version")
+def reviews_say_when_they_are_on_an_older_version(site):
     client, s, _, repo = site
     first = git(repo, "rev-parse", "HEAD")
     client.post("/c/OPP-10/reviews", data={"verdict": "concerns", "note": "Timing.", "sha": first}, headers=ORIGIN)
@@ -183,14 +193,16 @@ def test_reviews_say_when_they_are_on_an_older_version(site):
 
 # --- Proposing changes -------------------------------------------------------
 
-def test_front_matter_round_trips_for_every_card(site):
+@then("front matter round trips for every card")
+def front_matter_round_trips_for_every_card(site):
     for p in (FIXTURE / "opportunities").glob("OPP-*.md"):
         text = p.read_text()
         assert edits.join(*edits.split(text)) == text, p.name
         assert edits.edit_card(text, dict(edits.fields_for(text)), edits.split(text)[1]) == text, p.name
 
 
-def test_an_edit_opens_a_pull_request_naming_the_editor(site):
+@then("an edit opens a pull request naming the editor")
+def an_edit_opens_a_pull_request_naming_the_editor(site):
     client, _, pub, repo = site
     form = {k: v for k, v in [("f:" + k, v) for k, v in edits.fields_for((repo / "opportunities/OPP-10.md").read_text())]}
     form["f:confidence"] = "high (0.85)"
@@ -207,7 +219,8 @@ def test_an_edit_opens_a_pull_request_naming_the_editor(site):
     assert ME in p["body"] and "The sandbox replied." in p["body"]
 
 
-def test_edits_that_do_not_read_cleanly_open_nothing(site):
+@then("edits that do not read cleanly open nothing")
+def edits_that_do_not_read_cleanly_open_nothing(site):
     client, _, pub, repo = site
     text = (repo / "opportunities/OPP-10.md").read_text()
     body = edits.split(text)[1]
@@ -222,7 +235,8 @@ def test_edits_that_do_not_read_cleanly_open_nothing(site):
     assert edits.RULE in client.get("/c/OPP-10/edit").text
 
 
-def test_a_research_report_is_added_by_pull_request(site):
+@then("a research report is added by pull request")
+def a_research_report_is_added_by_pull_request(site):
     client, _, pub, _ = site
     form = {"slug": "wallet-relying-parties", "title": "Who pays for wallet sign-in?", "cards": "opp-10, OPP-01",
             "summary": "Buyers of relying-party integration.", "sources": "https://example.org/a\nhttps://example.org/b",
@@ -240,13 +254,15 @@ def test_a_research_report_is_added_by_pull_request(site):
     assert report["body"].startswith("# Who pays for wallet sign-in?")
 
 
-def test_branch_names_count_up():
+@then("branch names count up")
+def branch_names_count_up():
     assert github.branch_name("OPP-10", "david", []) == "opportunity/OPP-10-david-1"
     assert github.branch_name("OPP-10", "david", ["opportunity/OPP-10-david-1", "opportunity/OPP-10-david-7",
                                                   "opportunity/OPP-10-david-x"]) == "opportunity/OPP-10-david-8"
 
 
-def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request():
+@then("the github app signs in and opens a branch and pull request")
+def the_github_app_signs_in_and_opens_a_branch_and_pull_request():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
     from integrations.calls import Caller, MemorySink, Replay
@@ -282,7 +298,8 @@ def test_the_github_app_signs_in_and_opens_a_branch_and_pull_request():
     assert {r.repo for r in sink.records} == {"opportunity-site"}
 
 
-def test_the_call_log_goes_to_storage_only_when_the_deployment_says(monkeypatch, tmp_path):
+@then("the call log goes to storage only when the deployment says")
+def the_call_log_goes_to_storage_only_when_the_deployment_says(monkeypatch, tmp_path):
     monkeypatch.delenv("OPPORTUNITY_CALL_LOG_URL", raising=False)
     github.call_log.cache_clear()
     assert github.call_log() is None
@@ -307,7 +324,8 @@ def test_the_call_log_goes_to_storage_only_when_the_deployment_says(monkeypatch,
 
 # --- Content -----------------------------------------------------------------
 
-def test_the_checkout_is_pulled_at_most_once_a_minute(repo, tmp_path):
+@then("the checkout is pulled at most once a minute")
+def the_checkout_is_pulled_at_most_once_a_minute(repo, tmp_path):
     clone = tmp_path / "clone"
     c = content.Content(clone, url=str(repo))
     first = c.now().sha
@@ -319,20 +337,23 @@ def test_the_checkout_is_pulled_at_most_once_a_minute(repo, tmp_path):
     assert c.now().sha == second
 
 
-def test_the_first_request_clones_even_soon_after_boot(repo, tmp_path, monkeypatch):
+@then("the first request clones even soon after boot")
+def the_first_request_clones_even_soon_after_boot(repo, tmp_path, monkeypatch):
     # time.monotonic() counts from boot: on a fresh CI machine it can be under a minute.
     monkeypatch.setattr(content.time, "monotonic", lambda: 5.0)
     c = content.Content(tmp_path / "clone", url=str(repo))
     assert c.now().sha == git(repo, "rev-parse", "HEAD")
 
 
-def test_a_broken_card_is_reported_not_fatal(repo):
+@then("a broken card is reported not fatal")
+def a_broken_card_is_reported_not_fatal(repo):
     (repo / "opportunities" / "OPP-98.md").write_text("no front matter\n")
     snap = content.Content(repo, pull=False).now()
     assert "OPP-10" in snap.cards and any("OPP-98.md" in p for p in snap.problems)
 
 
-def test_the_card_format_comes_from_the_commit_shown(repo, tmp_path):
+@then("the card format comes from the commit shown")
+def the_card_format_comes_from_the_commit_shown(repo, tmp_path):
     c = content.Content(tmp_path / "clone", url=str(repo), every=0)
     assert c.now() and not hasattr(cardformat.opp(), "NEW")
     format_file = repo / "bizplan" / "opportunities.py"
@@ -341,7 +362,8 @@ def test_the_card_format_comes_from_the_commit_shown(repo, tmp_path):
     assert c.now() and cardformat.opp().NEW is True
 
 
-def test_a_broken_format_is_reported_and_the_last_one_stays(repo, tmp_path):
+@then("a broken format is reported and the last one stays")
+def a_broken_format_is_reported_and_the_last_one_stays(repo, tmp_path):
     c = content.Content(tmp_path / "clone", url=str(repo), every=0)
     assert "OPP-10" in c.now().cards
     (repo / "bizplan" / "opportunities.py").write_text("def broken(:\n")
@@ -350,7 +372,8 @@ def test_a_broken_format_is_reported_and_the_last_one_stays(repo, tmp_path):
     assert "OPP-10" in snap.cards and any("bizplan.opportunities" in p for p in snap.problems)
 
 
-def test_without_a_format_the_site_says_so(repo, tmp_path, monkeypatch):
+@then("without a format the site says so")
+def without_a_format_the_site_says_so(repo, tmp_path, monkeypatch):
     monkeypatch.setattr(cardformat, "_module", None)
     shutil.rmtree(repo / "bizplan")
     commit(repo, "no format")
@@ -379,7 +402,8 @@ class FakeKeycloak(access_check.AccessCheck):
         return (200, {"access": self.roles[token]}) if token in self.roles else (401, {})
 
 
-def test_the_proxy_login_asks_on_each_request(site, monkeypatch):
+@then("the proxy login asks on each request")
+def the_proxy_login_asks_on_each_request(site, monkeypatch):
     client, *_ = site
     monkeypatch.delenv("OPPORTUNITY_DEV_USER")
     keycloak = FakeKeycloak()
@@ -428,7 +452,8 @@ def test_the_proxy_login_asks_on_each_request(site, monkeypatch):
     assert get(ME, "me").status_code == 500
 
 
-def test_the_proxy_login_fails_closed_without_the_client(site, monkeypatch):
+@then("the proxy login fails closed without the client")
+def the_proxy_login_fails_closed_without_the_client(site, monkeypatch):
     client, *_ = site
     monkeypatch.delenv("OPPORTUNITY_DEV_USER")
     for name in ("OPPORTUNITY_CLIENT_ID", "OPPORTUNITY_CLIENT_SECRET"):
@@ -436,7 +461,8 @@ def test_the_proxy_login_fails_closed_without_the_client(site, monkeypatch):
     assert client.get("/", headers={"x-forwarded-email": ME, "x-forwarded-access-token": "me"}).status_code == 500
 
 
-def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
+@then("the dev user is refused on a cluster")
+def the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
     client, *_ = site
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
     assert client.get("/").status_code == 401
@@ -444,7 +470,8 @@ def test_the_dev_user_is_refused_on_a_cluster(site, monkeypatch):
 
 # --- Files -------------------------------------------------------------------
 
-def test_files_wait_for_storage(site, monkeypatch):
+@then("files wait for storage")
+def files_wait_for_storage(site, monkeypatch):
     client, *_ = site
     monkeypatch.delenv("OPPORTUNITY_FILES_URL", raising=False)
     assert files.from_env() is None
@@ -456,7 +483,8 @@ def test_files_wait_for_storage(site, monkeypatch):
     assert again.kept and sent.id != v2.id and len(fake.list("OPP-10")) == 2
 
 
-def test_with_uploads_on_a_card_has_the_form_and_a_file_goes_to_its_subject(site, monkeypatch):
+@then("with uploads on a card has the form and a file goes to its subject")
+def with_uploads_on_a_card_has_the_form_and_a_file_goes_to_its_subject(site, monkeypatch):
     client, *_ = site
     fake = files.FakeFiles()
     monkeypatch.setattr(main.Services, "files", fake)
@@ -475,7 +503,8 @@ def test_with_uploads_on_a_card_has_the_form_and_a_file_goes_to_its_subject(site
     assert "OPP-10-offer-v1-.pdf" in shown and "OPP-10 offer v1" in shown and "kept" in shown
 
 
-def test_a_stored_file_is_read_through_the_site_as_a_download(site, monkeypatch):
+@then("a stored file is read through the site as a download")
+def a_stored_file_is_read_through_the_site_as_a_download(site, monkeypatch):
     client, *_ = site
     fake = files.FakeFiles()
     monkeypatch.setattr(main.Services, "files", fake)
@@ -499,7 +528,8 @@ def test_a_stored_file_is_read_through_the_site_as_a_download(site, monkeypatch)
     assert client.get(f"/files/{stored.id}/chart.svg").status_code == 404
 
 
-def test_the_client_reads_a_file_with_the_pods_token():
+@then("the client reads a file with the pod's token")
+def the_client_reads_a_file_with_the_pods_token():
     url = f"GET https://storage.sustenaut.eu/opportunity/f/{'a' * 64}/a.pdf"
     uploads, replay, _ = stored_files({url: {"status": 200, "text": "%PDF"}})
     assert uploads.get("a" * 64, "a.pdf") == b"%PDF"
@@ -511,7 +541,8 @@ def test_the_client_reads_a_file_with_the_pods_token():
             missing.get("a" * 64, "a.pdf")
 
 
-def test_a_reports_files_are_its_research_subject(site, monkeypatch):
+@then("a report's files are its research subject")
+def a_reports_files_are_its_research_subject(site, monkeypatch):
     client, *_ = site
     fake = files.FakeFiles()
     monkeypatch.setattr(main.Services, "files", fake)
@@ -522,7 +553,8 @@ def test_a_reports_files_are_its_research_subject(site, monkeypatch):
     assert [f.kept for f in fake.list(f"research/{slug}")] == [False]
 
 
-def test_an_upload_without_a_file_or_with_a_long_label_says_so(site, monkeypatch):
+@then("an upload without a file or with a long label says so")
+def an_upload_without_a_file_or_with_a_long_label_says_so(site, monkeypatch):
     client, *_ = site
     monkeypatch.setattr(main.Services, "files", files.FakeFiles())
     empty = client.post("/c/OPP-10/files", headers=ORIGIN, files={"file": ("", b"", "application/pdf")})
@@ -532,7 +564,8 @@ def test_an_upload_without_a_file_or_with_a_long_label_says_so(site, monkeypatch
     assert long.status_code == 422 and "under 200 characters" in long.text
 
 
-def test_storage_refusing_or_down_is_shown_on_the_page(site, monkeypatch):
+@then("storage refusing or down is shown on the page")
+def storage_refusing_or_down_is_shown_on_the_page(site, monkeypatch):
     client, *_ = site
 
     class Refusing(files.FakeFiles):
@@ -551,7 +584,8 @@ def test_storage_refusing_or_down_is_shown_on_the_page(site, monkeypatch):
     assert down.status_code == 503 and "Try again in a minute" in down.text
 
 
-def test_uploads_need_storage_switched_on_the_sites_own_page_and_a_form(site, monkeypatch):
+@then("uploads need storage switched on the site's own page and a form")
+def uploads_need_storage_switched_on_the_sites_own_page_and_a_form(site, monkeypatch):
     client, *_ = site
     one = {"file": ("a.pdf", b"%PDF", "application/pdf")}
     assert client.post("/c/OPP-10/files", headers=ORIGIN, files=one).status_code == 404
@@ -564,7 +598,8 @@ def test_uploads_need_storage_switched_on_the_sites_own_page_and_a_form(site, mo
     assert big.status_code == 413
 
 
-def test_a_files_name_is_made_one_storage_takes():
+@then("a file's name is made one storage takes")
+def a_files_name_is_made_one_storage_takes():
     assert files.safe_name("C:\\Users\\me\\Market report (v3).pdf") == "Market-report-v3-.pdf"
     assert files.safe_name("../.hidden.txt") == "file.hidden.txt"
     assert files.safe_name("ü.png") == "file-.png" and files.safe_name("") == "file"
@@ -572,7 +607,8 @@ def test_a_files_name_is_made_one_storage_takes():
     assert len(long) == 120 and long.endswith(".pdf")
 
 
-def test_storage_saying_no_or_not_answering_becomes_the_sites_own_errors():
+@then("storage saying no or not answering becomes the site's own errors")
+def storage_saying_no_or_not_answering_becomes_the_sites_own_errors():
     uploads, _, _ = stored_files({"POST https://storage.sustenaut.eu/opportunity/files":
                                   {"status": 415, "json": {"error": "opportunity takes pdf, not .exe"}}})
     with pytest.raises(files.Refused, match="opportunity takes pdf, not .exe"):
@@ -590,7 +626,8 @@ def stored_files(responses):
     return files.StorageFiles(caller, lambda: "pod-token"), replay, sink
 
 
-def test_an_upload_goes_to_storage_with_its_card_as_subject():
+@then("an upload goes to storage with its card as subject")
+def an_upload_goes_to_storage_with_its_card_as_subject():
     import email.parser
 
     answer = {"id": "f" * 64, "name": "offer.pdf", "url": f"/opportunity/f/{'f' * 64}/offer.pdf",
@@ -611,7 +648,8 @@ def test_an_upload_goes_to_storage_with_its_card_as_subject():
     assert [(r.plugin, r.operation, r.outcome) for r in sink.records] == [("storage.api", "write", "ok")]
 
 
-def test_a_cards_files_are_the_tenants_listing_for_its_subject():
+@then("a card's files are the tenant's listing for its subject")
+def a_cards_files_are_the_tenants_listing_for_its_subject():
     def listed(fid, name, **metadata):
         return {"name": name, "id": fid * 64, "url": f"/opportunity/f/{fid * 64}/{name}", "size": 3,
                 "uploaded": "2026-11-06T08:00:00.000Z", "metadata": metadata}
@@ -630,7 +668,8 @@ def test_a_cards_files_are_the_tenants_listing_for_its_subject():
     assert len(replay.sent) == 2 and replay.sent[0].headers["Authorization"] == "Bearer pod-token"
 
 
-def test_storage_refusing_a_listing_is_an_error_not_an_empty_list():
+@then("storage refusing a listing is an error not an empty list")
+def storage_refusing_a_listing_is_an_error_not_an_empty_list():
     from integrations.clients.storage import StorageError
 
     uploads, _, _ = stored_files({"GET https://storage.sustenaut.eu/opportunity/list?prefix=f%2F":
@@ -639,7 +678,8 @@ def test_storage_refusing_a_listing_is_an_error_not_an_empty_list():
         uploads.list("OPP-10")
 
 
-def test_files_are_on_when_the_deployment_says_where_storage_is(monkeypatch, tmp_path):
+@then("files are on when the deployment says where storage is")
+def files_are_on_when_the_deployment_says_where_storage_is(monkeypatch, tmp_path):
     token = tmp_path / "token"
     token.write_text("pod-token\n")
     monkeypatch.setenv("OPPORTUNITY_FILES_URL", "https://storage.example/")
@@ -654,9 +694,14 @@ def test_files_are_on_when_the_deployment_says_where_storage_is(monkeypatch, tmp
 
 # --- PostgreSQL --------------------------------------------------------------
 
-@pytest.mark.skipif(not os.environ.get("OPPORTUNITY_TEST_DATABASE_URL"),
-                    reason="set OPPORTUNITY_TEST_DATABASE_URL to an empty database to test the PostgreSQL store")
-def test_postgres_store():
+@then("postgres store")
+def postgres_store():
+    if not os.environ.get("OPPORTUNITY_TEST_DATABASE_URL"):
+        pytest.skip("set OPPORTUNITY_TEST_DATABASE_URL to an empty database to test the PostgreSQL store")
+    _case_postgres_store()
+
+
+def _case_postgres_store():
     import psycopg
 
     url = os.environ["OPPORTUNITY_TEST_DATABASE_URL"]
@@ -677,13 +722,15 @@ def test_postgres_store():
         s.add_review("OPP-10", "maybe", "", "abc", ME)
 
 
-def test_the_site_is_alive_and_ready_with_its_database():
+@then("the site is alive and ready with its database")
+def the_site_is_alive_and_ready_with_its_database():
     http = TestClient(main.app)
     assert http.get("/livez").json() == {"ok": True}
     assert http.get("/healthz").json() == {"ok": True, "unhealthy": []}
 
 
-def test_a_database_it_cannot_reach_makes_it_unready_but_not_dead(monkeypatch):
+@then("a database it cannot reach makes it unready but not dead")
+def a_database_it_cannot_reach_makes_it_unready_but_not_dead(monkeypatch):
     class Down(store.MemoryStore):
         def ping(self):
             raise OSError("connection refused")
@@ -695,7 +742,8 @@ def test_a_database_it_cannot_reach_makes_it_unready_but_not_dead(monkeypatch):
     assert http.get("/livez").status_code == 200
 
 
-def test_a_store_not_made_yet_is_checked_from_the_environment(monkeypatch):
+@then("a store not made yet is checked from the environment")
+def a_store_not_made_yet_is_checked_from_the_environment(monkeypatch):
     monkeypatch.setenv("OPPORTUNITY_DATABASE_URL", "host=127.0.0.1 port=1 dbname=none")
     found = store.check(None)
     assert not found.ok and found.plugin == "opportunity.postgres"
@@ -703,7 +751,8 @@ def test_a_store_not_made_yet_is_checked_from_the_environment(monkeypatch):
     assert store.check(None).ok
 
 
-def test_the_storage_token_is_read_from_its_file_on_each_upload(tmp_path):
+@then("the storage token is read from its file on each upload")
+def the_storage_token_is_read_from_its_file_on_each_upload(tmp_path):
     """The kubelet renews the projected token's file, so each upload reads it afresh."""
     from opportunity import files
 
