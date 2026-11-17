@@ -126,11 +126,12 @@ Every run can run again: what is ready is left alone. In order:
 |---|---|
 | the namespace `opportunity` | the server's `sustenaut-app`, which makes it and its deploy identity |
 | `bitwarden.generated` `opportunity-cookie-secret` | oauth2-proxy's cookie secret: a new one of its shape, written to Bitwarden, when it is missing or misshapen |
+| `gcp.workload-identity` `postgres` | that PostgreSQL's ServiceAccount may act as `sustenaut-opportunity-wal` through the `services` pool, so the WAL archive needs no key; a drill reads as `sustenaut-opportunity-wal-read`, which can only read |
 | `gcp.workload-identity` `backup` | that the nightly dump's ServiceAccount may act as `sustenaut-opportunity-backup` (`infra/`'s account) through the `services` Workload Identity pool, so the upload needs no key (`k8s/google-credential.yaml`); the grant is Terraform's (shared-infra's `infra/services-identity.tf`) and only proposed |
 | the Secret `opportunity-secrets` | made from `opportunity-db-password`, the cookie secret and the GitHub App's three values; the app and oauth2-proxy restarted |
 | `auth.sign-in-client` | sustenaut.eu's team-site client in the team realm, role `opportunity`: the approval record written into shared-infra's `infra/auth-approvals.json` when auth.sustenaut.eu wants one, and once the client is issued, the Secret `opportunity-oidc` made from it on the server |
 | `k8s.manifests` | `k8s/admin/network-policy.yaml` applied: only oauth2-proxy's pods may reach the app, and only the app and the dump the database |
-| `pg.database` | the WAL archive's two keys in Bitwarden and the Secret `opportunity-wal`, as `./backups/pg-backup setup-secrets` makes them; then PostgreSQL, the archive and the last base backup checked |
+| `pg.database` | the WAL archive's encryption key in Bitwarden and the Secret `opportunity-wal` (it alone), as `./backups/pg-backup setup-secrets` makes them; then PostgreSQL, how it reaches the bucket with no key (ServiceAccount `postgres`, `k8s/wal-google-credential.yaml`), the archive and the last base backup checked |
 | `DEPLOY_OPPORTUNITY` and the rollout | the gate on, once everything before it is ready, and `deploy.yml` run and waited for |
 | `service.health` | `https://opportunity.sustenaut.eu/healthz` answers |
 
@@ -184,7 +185,7 @@ log says so; the pod then stays unready.
 | Monthly, and after any change to the backups or PostgreSQL (right after a merge: `drill --wait`) | `./backups/pg-backup drill` |
 | To look at the database as it was at a moment, in a scratch namespace | `./backups/pg-backup restore --to "2026-11-05 14:32:00+00"` |
 | To put that restore back as the live database | `./backups/pg-backup promote opportunity-restore-<the namespace>` |
-| Once, and after a rebuild: the archive's keys, into Bitwarden and the cluster | the deploy walk above (`pg.database`), or `./backups/pg-backup setup-secrets` |
+| Once, and after a rebuild: the archive's encryption key, into Bitwarden and the cluster | the deploy walk above (`pg.database`), or `./backups/pg-backup setup-secrets` |
 
 pg-backup's README says what each does. Or restore a dump:
 

@@ -10,6 +10,7 @@ click==8.5.0
 cryptography==50.0.2
 fastapi==0.142.2
 fastavro==1.13.1
+gherkin-official==43.0.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
@@ -17,12 +18,15 @@ idna==3.20
 iniconfig==2.3.0
 integrations @ https://github.com/Sustenaut/integrations/releases/download/v0.14.0/integrations-0.14.0-py3-none-any.whl
 jinja2==3.1.6
+mako==1.4.3
 markdown==3.11
 markupsafe==3.0.3
 numpy==2.5.3
 opentelemetry-api==1.45.2
 packaging==26.3
 pandas==3.0.6
+parse==1.22.4
+parse-type==0.6.6
 pluggy==1.6.0
 psycopg==3.3.6
 psycopg-binary==3.3.6
@@ -31,6 +35,7 @@ pydantic==2.13.5
 pydantic-core==2.46.5
 pygments==2.21.0
 pytest==9.1.1
+pytest-bdd==9.0.1
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
 six==1.17.0
