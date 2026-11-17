@@ -116,12 +116,19 @@
         "type": "k8s.secret",
         "name": "opportunity-wal",
         "keys": [
-          "gcs-key.json",
           "libsodium-key"
         ],
         "after": [
           "pg.database:postgres"
         ]
+      },
+      {
+        "type": "gcp.workload-identity",
+        "account": "sustenaut-opportunity-wal",
+        "project": "sustenaut",
+        "serviceaccount": "postgres",
+        "pool": "projects/948171295184/locations/global/workloadIdentityPools/services",
+        "granted_in": "Sustenaut/shared-infra's infra/services-identity.tf"
       },
       {
         "type": "upstream",
