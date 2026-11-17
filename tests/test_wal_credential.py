@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROVIDER = ("//iam.googleapis.com/projects/948171295184/locations/global/workloadIdentityPools/services/"
             "providers/sustenaut-k3s")
 
-scenarios("wal-credential.feature")
+scenarios(str(Path(__file__).resolve().parent / "features" / "wal-credential.feature"))
 
 
 @given("the manifests in k8s and backups/pg-backup.json", target_fixture="wal")
