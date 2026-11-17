@@ -1,5 +1,5 @@
 # Build and deploy the opportunity site (opportunity.sustenaut.eu) once CI passes on a
-# merge to main, or by hand, with pubkit's k8s-deploy.yml (pubkit's README, "Deploying
+# merge to main, or by hand, with pubrules's k8s-deploy.yml (pubrules's README, "Deploying
 # a service to k3s"). The image goes to GitHub's container registry and holds no cards
 # and no bizplan: the site reads both from its checkout of business-plan. Then the
 # manifests in k8s/, rendered with that image, go to the Sustenaut k3s server
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   deploy:
-    uses: Sustenaut/pubdeploy/.github/workflows/k8s-deploy.yml@9d13c3fca915b386742565895d67d9a831492cfa # v0.4.1
+    uses: Sustenaut/pubdeploy/.github/workflows/k8s-deploy.yml@fc34f05c790732a1ea831d896e557e9f816cba50 # v0.5.0
     with:
       image: ghcr.io/sustenaut/sustenaut-opportunity
       deploys: k8s opportunity DEPLOY_OPPORTUNITY

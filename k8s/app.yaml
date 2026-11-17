@@ -29,7 +29,7 @@ spec:
         app: opportunity
     spec:
       serviceAccountName: app # service-accounts.yaml: no RBAC, no API token
-      # Its hardening and probes come from pubkit's app component (kustomization.yaml).
+      # Its hardening and probes come from pubrules's app component (kustomization.yaml).
       # The root filesystem is read-only, so what it writes goes to checkout and tmp.
       securityContext:
         fsGroup: 1000
